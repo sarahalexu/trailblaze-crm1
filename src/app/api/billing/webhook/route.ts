@@ -1,80 +1,187 @@
 // src/app/api/billing/webhook/route.ts
+// Paystack sends events here when payments succeed, fail, or subscriptions change
+// Set this URL in Paystack: Settings → API Keys & Webhooks → Webhook URL
+// URL: https://crm.trailblazeafrica.com/api/billing/webhook
+
 import { getAdminClient } from '@/lib/supabase/admin'
-import { verifyWebhookSignature } from '@/lib/paystack'
 import { NextResponse } from 'next/server'
+import crypto from 'crypto'
+
+const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY || ''
+
+// Verify Paystack webhook signature
+function verifySignature(body: string, signature: string): boolean {
+  if (!PAYSTACK_SECRET) return false
+  const hash = crypto.createHmac('sha512', PAYSTACK_SECRET).update(body).digest('hex')
+  return hash === signature
+}
 
 export async function POST(request: Request) {
   const body = await request.text()
   const signature = request.headers.get('x-paystack-signature') || ''
-  if (!verifyWebhookSignature(body, signature)) {
+
+  // Verify webhook is from Paystack
+  if (PAYSTACK_SECRET && !verifySignature(body, signature)) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
   }
 
-  const supabaseAdmin = getAdminClient()
   const event = JSON.parse(body)
+  const supabaseAdmin = getAdminClient()
 
-  try {
-    switch (event.event) {
-      case 'charge.success': {
-        const data = event.data
-        const orgId = data.metadata?.org_id
-        const planTier = data.metadata?.plan_tier
-        if (orgId && planTier) {
-          const planLimits: Record<string, { max_users: number; max_accounts: number }> = {
-            growth: { max_users: 10, max_accounts: 500 },
-            scale: { max_users: 50, max_accounts: 99999 },
-            enterprise: { max_users: 99999, max_accounts: 99999 },
-          }
-          const limits = planLimits[planTier] || planLimits.growth
-          await supabaseAdmin.from('organizations').update({
-            plan_tier: planTier, subscription_status: 'active', max_users: limits.max_users, max_accounts: limits.max_accounts,
-          }).eq('id', orgId)
+  switch (event.event) {
+    // One-time payment or first subscription payment
+    case 'charge.success': {
+      const data = event.data
+      const metadata = data.metadata || {}
+      const orgId = metadata.org_id
+      const planTier = metadata.plan_tier
 
-          const waLimits: Record<string, number> = { growth: 1000, scale: 99999, enterprise: 99999 }
-          await supabaseAdmin.from('whatsapp_config').update({ monthly_message_limit: waLimits[planTier] || 0 }).eq('org_id', orgId)
+      if (!orgId || !planTier) break
 
-          const { data: admin } = await supabaseAdmin.from('users').select('id').eq('org_id', orgId).eq('role', 'admin').limit(1).single()
-          if (admin) {
-            await supabaseAdmin.from('notifications').insert({
-              org_id: orgId, user_id: admin.id, type: 'system',
-              title: `Plan upgraded to ${planTier}`,
-              message: `Your workspace has been upgraded to the ${planTier} plan.`,
-              delivery_channel: 'in_app',
-            })
-          }
-        }
-        break
+      // Get current org
+      const { data: org } = await supabaseAdmin
+        .from('organizations').select('plan_tier').eq('id', orgId).single()
+
+      // Upgrade the plan
+      await supabaseAdmin.from('organizations').update({
+        plan_tier: planTier,
+        subscription_status: 'active',
+        previous_plan_tier: org?.plan_tier || 'starter',
+        paystack_customer_code: data.customer?.customer_code || null,
+        paystack_subscription_code: data.subscription?.subscription_code || null,
+        last_payment_at: new Date().toISOString(),
+        last_payment_amount: data.amount / 100, // Convert from kobo
+        access_expires_at: null, // Clear any code-based expiry — they're paying now
+        access_code_id: null,
+      }).eq('id', orgId)
+
+      // Create invoice record
+      await supabaseAdmin.from('invoices').insert({
+        org_id: orgId,
+        invoice_number: `TB-${Date.now().toString(36).toUpperCase()}`,
+        amount: data.amount / 100,
+        currency: data.currency || 'NGN',
+        plan_tier: planTier,
+        billing_cycle: metadata.billing_cycle || 'monthly',
+        user_count: metadata.user_count || 1,
+        paystack_reference: data.reference,
+        paid_at: new Date(data.paid_at || Date.now()).toISOString(),
+        status: 'paid',
+        customer_email: data.customer?.email,
+      })
+
+      // Notify org admin
+      const { data: admins } = await supabaseAdmin
+        .from('users').select('id').eq('org_id', orgId).eq('role', 'admin').limit(1)
+      if (admins?.[0]) {
+        await supabaseAdmin.from('notifications').insert({
+          user_id: admins[0].id, org_id: orgId, type: 'system',
+          title: `Plan upgraded to ${planTier}`,
+          message: `Payment of ₦${(data.amount / 100).toLocaleString()} received. Your ${planTier} plan is now active.`,
+        })
       }
-      case 'subscription.disable':
-      case 'subscription.not_renew': {
-        const customerEmail = event.data?.customer?.email
-        if (customerEmail) {
-          const { data: user } = await supabaseAdmin.from('users').select('org_id').eq('email', customerEmail).eq('role', 'admin').limit(1).single()
-          if (user) {
-            await supabaseAdmin.from('organizations').update({ plan_tier: 'starter', subscription_status: 'cancelled', max_users: 1, max_accounts: 15 }).eq('id', user.org_id)
-            await supabaseAdmin.from('whatsapp_config').update({ monthly_message_limit: 0 }).eq('org_id', user.org_id)
-          }
-        }
-        break
-      }
-      case 'invoice.payment_failed': {
-        const customerEmail = event.data?.customer?.email
-        if (customerEmail) {
-          const { data: user } = await supabaseAdmin.from('users').select('id, org_id').eq('email', customerEmail).eq('role', 'admin').limit(1).single()
-          if (user) {
-            await supabaseAdmin.from('organizations').update({ subscription_status: 'past_due' }).eq('id', user.org_id)
-            await supabaseAdmin.from('notifications').insert({
-              org_id: user.org_id, user_id: user.id, type: 'system', title: 'Payment failed',
-              message: 'Your subscription payment failed. Please update your payment method.', delivery_channel: 'in_app',
-            })
-          }
-        }
-        break
-      }
+      break
     }
-    return NextResponse.json({ received: true })
-  } catch (error) {
-    console.error('Webhook processing error:', error)
-    return NextResponse.json({ received: true })
+
+    // Subscription renewed successfully
+    case 'subscription.charge.success': {
+      const data = event.data
+      const subCode = data.subscription?.subscription_code
+
+      if (subCode) {
+        // Find org by subscription code
+        const { data: org } = await supabaseAdmin
+          .from('organizations')
+          .select('id, plan_tier')
+          .eq('paystack_subscription_code', subCode)
+          .single()
+
+        if (org) {
+          await supabaseAdmin.from('organizations').update({
+            subscription_status: 'active',
+            last_payment_at: new Date().toISOString(),
+            last_payment_amount: data.amount / 100,
+          }).eq('id', org.id)
+
+          // Create invoice
+          await supabaseAdmin.from('invoices').insert({
+            org_id: org.id,
+            invoice_number: `TB-${Date.now().toString(36).toUpperCase()}`,
+            amount: data.amount / 100,
+            currency: 'NGN',
+            plan_tier: org.plan_tier,
+            billing_cycle: 'monthly',
+            paystack_reference: data.reference,
+            paid_at: new Date().toISOString(),
+            status: 'paid',
+          })
+        }
+      }
+      break
+    }
+
+    // Subscription payment failed
+    case 'subscription.charge.failed': {
+      const subCode = event.data.subscription?.subscription_code
+      if (subCode) {
+        const { data: org } = await supabaseAdmin
+          .from('organizations')
+          .select('id, plan_tier')
+          .eq('paystack_subscription_code', subCode)
+          .single()
+
+        if (org) {
+          await supabaseAdmin.from('organizations').update({
+            subscription_status: 'past_due',
+          }).eq('id', org.id)
+
+          const { data: admins } = await supabaseAdmin
+            .from('users').select('id').eq('org_id', org.id).eq('role', 'admin').limit(1)
+          if (admins?.[0]) {
+            await supabaseAdmin.from('notifications').insert({
+              user_id: admins[0].id, org_id: org.id, type: 'system',
+              title: 'Payment failed',
+              message: 'Your subscription payment failed. Please update your payment method in Settings → Billing to avoid losing access.',
+            })
+          }
+        }
+      }
+      break
+    }
+
+    // Subscription cancelled
+    case 'subscription.disable': {
+      const subCode = event.data.subscription_code
+      if (subCode) {
+        const { data: org } = await supabaseAdmin
+          .from('organizations')
+          .select('id, plan_tier, previous_plan_tier')
+          .eq('paystack_subscription_code', subCode)
+          .single()
+
+        if (org) {
+          // Downgrade to starter
+          await supabaseAdmin.from('organizations').update({
+            plan_tier: 'starter',
+            subscription_status: 'cancelled',
+            paystack_subscription_code: null,
+            previous_plan_tier: org.plan_tier,
+          }).eq('id', org.id)
+
+          const { data: admins } = await supabaseAdmin
+            .from('users').select('id').eq('org_id', org.id).eq('role', 'admin').limit(1)
+          if (admins?.[0]) {
+            await supabaseAdmin.from('notifications').insert({
+              user_id: admins[0].id, org_id: org.id, type: 'system',
+              title: 'Subscription cancelled',
+              message: 'Your subscription has been cancelled and your plan has been downgraded to Free. Your data is safe. Re-subscribe anytime from Settings → Billing.',
+            })
+          }
+        }
+      }
+      break
+    }
   }
+
+  return NextResponse.json({ received: true })
 }
