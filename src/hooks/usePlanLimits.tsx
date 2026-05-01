@@ -1,4 +1,4 @@
-// src/hooks/usePlanLimits.ts
+// src/hooks/usePlanLimits.tsx
 // Client-side hook that checks plan limits and shows upgrade prompts
 // Usage: const { check, showUpgrade, UpgradeModal } = usePlanLimits()
 //        const allowed = await check('create_account')
