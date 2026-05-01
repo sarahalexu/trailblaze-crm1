@@ -2,6 +2,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { usePlanLimits } from '@/hooks/usePlanLimits'
 import { createClient } from '@/lib/supabase/client'
 
 export default function SnippetsPage() {
@@ -16,6 +17,7 @@ export default function SnippetsPage() {
   const [channel, setChannel] = useState('any')
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
+  const { check, UpgradeModal } = usePlanLimits()
   const supabase = createClient()
 
   useEffect(() => { load() }, [])
@@ -36,6 +38,7 @@ export default function SnippetsPage() {
   }
 
   async function saveSnippet() {
+    if (!editId && !check('create_snippet')) return
     if (!title || !content) return
     setSaving(true)
     const { data: { user } } = await supabase.auth.getUser()
@@ -202,6 +205,7 @@ export default function SnippetsPage() {
           </div>
         </div>
       )}
+      <UpgradeModal />
     </div>
   )
 }

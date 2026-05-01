@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
+import PlanBanner from '@/components/ui/PlanBanner'
 
 // SVG Donut Chart component
 function DonutChart({ data, size = 140 }: { data: { label: string; value: number; color: string }[]; size?: number }) {
@@ -220,6 +221,7 @@ export default function DashboardPage() {
       {m.total === 0 && (
         <DemoBanner onGenerate={() => loadDashboard()} />
       )}
+      <PlanBanner />
 
       {/* Metric cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

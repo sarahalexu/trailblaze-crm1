@@ -1,214 +1,170 @@
-// src/app/(dashboard)/settings/billing/page.tsx
 'use client'
-
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Organization } from '@/lib/types'
-import { PLAN_LIMITS } from '@/lib/types'
+import AccessCodeEntry from '@/components/ui/AccessCodeEntry'
+declare global { interface Window { PaystackPop: any } }
+import { usePlanLimits } from '@/hooks/usePlanLimits'
+
 
 export default function BillingPage() {
-  const [org, setOrg] = useState<Organization | null>(null)
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly')
-  const [processing, setProcessing] = useState<string | null>(null)
+  const [org, setOrg] = useState<any>(null)
+  const [invoices, setInvoices] = useState<any[]>([])
+  const [users, setUsers] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [processing, setProcessing] = useState<string|null>(null)
+  const [cycle, setCycle] = useState<'monthly'|'annual'>('monthly')
   const supabase = createClient()
+  const { check, UpgradeModal } = usePlanLimits()
+
 
   useEffect(() => {
-    async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data: profile } = await supabase
-        .from('users').select('org_id').eq('auth_id', user.id).single()
-      if (!profile) return
-      const { data: orgData } = await supabase
-        .from('organizations').select('*').eq('id', profile.org_id).single()
-      setOrg(orgData)
-      setLoading(false)
-    }
+    if (!document.querySelector('script[src*="paystack"]')) { const s=document.createElement('script'); s.src='https://js.paystack.co/v2/inline.js'; document.head.appendChild(s) }
     load()
+    if (!check('create_account')) return
   }, [])
 
-  async function handleUpgrade(planTier: string) {
-    setProcessing(planTier)
-    const res = await fetch('/api/billing/initialize', {
+  async function load() {
+    const { data: { user } } = await supabase.auth.getUser(); if (!user) return
+    const { data: p } = await supabase.from('users').select('org_id').eq('auth_id', user.id).single(); if (!p) return
+    const { data: o } = await supabase.from('organizations').select('*').eq('id', p.org_id).single(); setOrg(o)
+    const { count } = await supabase.from('users').select('*',{count:'exact',head:true}).eq('org_id', p.org_id); setUsers(count||1)
+    const { data: inv } = await supabase.from('invoices').select('*').eq('org_id', p.org_id).order('created_at', { ascending: false }).limit(10)
+    setInvoices(inv||[])
+    setLoading(false)
+  }
+
+  async function pay(tier: string) {
+    if (!org) return; setProcessing(tier)
+    const price = tier==='growth'?20000:45000, disc = cycle==='annual'?0.8:1
+    const total = Math.round(price * users * disc * (cycle==='annual'?12:1) * 100)
+    const { data: { user } } = await supabase.auth.getUser(); if (!user) return
+    const { data: p } = await supabase.from('users').select('email').eq('auth_id', user.id).single()
+    try {
+      const ps = new window.PaystackPop()
+      ps.newTransaction({
+        key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || '',
+        email: p?.email || user.email, amount: total, currency: 'NGN',
+        ref: `TB-${tier}-${org.id.slice(0,8)}-${Date.now()}`,
+        metadata: { org_id: org.id, plan_tier: tier, billing_cycle: cycle, user_count: users },
+        onSuccess: async () => {
+          await supabase.from('organizations').update({ plan_tier: tier, subscription_status: 'active', previous_plan_tier: org.plan_tier }).eq('id', org.id)
+          setProcessing(null); window.location.reload()
+        },
+        onCancel: () => setProcessing(null),
+      })
+    } catch { setProcessing(null); alert('Payment failed. Try again.') }
+  }
+
+  
+  async function handleDowngrade() {
+
+    if (!confirm('Are you sure? You will lose access to premium features.')) return
+  
+    const reason = prompt('Optional: why are you downgrading?')
+  
+    await fetch('/api/billing/downgrade', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ planTier, billingCycle }),
+      body: JSON.stringify({
+        to_plan: 'starter',
+        reason
+      }),
     })
-
-    if (res.ok) {
-      const data = await res.json()
-      // Redirect to Paystack checkout
-      window.location.href = data.authorization_url
-    } else {
-      const err = await res.json()
-      alert(err.error || 'Payment initialization failed')
-    }
-    setProcessing(null)
+  
+    window.location.reload()
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin"></div>
-      </div>
-    )
-  }
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin"/></div>
 
   const plans = [
-    {
-      tier: 'starter',
-      name: 'Starter',
-      monthly: 'Free',
-      annual: 'Free',
-      desc: 'For individuals getting started',
-      features: ['1 user', '15 accounts', 'KEEP health scoring', '2 playbooks', 'Basic reporting'],
-    },
-    {
-      tier: 'growth',
-      name: 'Growth',
-      monthly: '₦20,000',
-      annual: '₦16,000',
-      desc: 'For teams managing client accounts',
-      features: ['Up to 10 users', '500 accounts', 'WhatsApp integration', 'AI automation', 'All 5 playbooks', '24hr email support', 'Data export'],
-      popular: true,
-    },
-    {
-      tier: 'scale',
-      name: 'Scale',
-      monthly: '₦45,000',
-      annual: '₦36,000',
-      desc: 'For growing organizations',
-      features: ['Up to 50 users', 'Unlimited accounts', 'WhatsApp broadcasts', 'Churn prediction', 'Custom playbooks', '8hr support', 'Stakeholder mapping', 'API access'],
-    },
-    {
-      tier: 'enterprise',
-      name: 'Enterprise',
-      monthly: 'Custom',
-      annual: 'Custom',
-      desc: 'For large organizations',
-      features: ['Unlimited everything', 'Dedicated AM', 'Custom integrations', 'SSO', 'White-label option', '4hr SLA'],
-    },
+    { tier:'starter', name:'Free', price:0, features:['1 user','15 accounts','1 sequence (25 contacts)','25 emails/day','2 playbooks','Basic reporting'], excluded:['Email tracking','AI features','WhatsApp sequences','Data export'] },
+    { tier:'growth', name:'Growth', price:cycle==='annual'?16000:20000, popular:true, features:['10 users','500 accounts','10 sequences (200 contacts)','200 emails/day','Email tracking','AI features','WhatsApp sequences','All 5 playbooks','50 snippets','Data export'], excluded:['Custom playbooks','API access'] },
+    { tier:'scale', name:'Scale', price:cycle==='annual'?36000:45000, features:['50 users','Unlimited accounts','Unlimited sequences','1,000 emails/day','Advanced analytics','Custom playbooks','Stakeholder mapping','API access'], excluded:[] },
   ]
 
-  const currentTierIndex = ['starter', 'growth', 'scale', 'enterprise', 'beta'].indexOf(org?.plan_tier || 'starter')
-  const isBeta = org?.plan_tier === 'beta'
+  const canUp = (t: string) => { const o2 = ['starter','growth','scale']; return o2.indexOf(t) > o2.indexOf(org?.plan_tier==='beta'?'scale':org?.plan_tier||'starter') }
 
   return (
     <div className="max-w-4xl">
-      <h1 className="text-xl font-medium text-gray-900 mb-1">Billing</h1>
-      <p className="text-sm text-gray-500 mb-6">Manage your subscription and plan.</p>
+      <div className="mb-6"><h1 className="text-xl font-semibold text-gray-900">Billing</h1><p className="text-sm text-gray-500 mt-0.5">Manage your plan and payments.</p></div>
 
-      {/* Current plan */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <div className="text-sm text-gray-500 mb-1">Current plan</div>
-            <div className="text-lg font-medium capitalize" style={{ color: '#5a1890' }}>
-              {org?.plan_tier}
-              {isBeta && <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Full access during beta</span>}
-            </div>
+            <div className="flex items-center gap-2 mb-1"><h3 className="text-sm font-medium text-gray-900">Current plan</h3><span className="text-xs px-2.5 py-0.5 rounded-full font-medium capitalize" style={{background:'rgba(90,24,144,0.08)',color:'#5a1890'}}>{org?.plan_tier==='beta'?'Beta (all features)':org?.plan_tier}</span></div>
+            <p className="text-xs text-gray-500">{users} user{users!==1?'s':''} · {org?.name}{org?.access_expires_at ? ` · Access expires ${new Date(org.access_expires_at).toLocaleDateString('en-NG')}` : ''}</p>
           </div>
-          <div className="text-right">
-            <div className="text-sm text-gray-500 mb-1">Status</div>
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-              org?.subscription_status === 'active' || org?.subscription_status === 'beta'
-                ? 'bg-green-100 text-green-700'
-                : org?.subscription_status === 'past_due'
-                ? 'bg-red-100 text-red-700'
-                : 'bg-gray-100 text-gray-600'
-            }`}>
-              {org?.subscription_status === 'beta' ? 'Beta (all features)' : org?.subscription_status}
-            </span>
-          </div>
-        </div>
-
-        {isBeta && (
-          <div className="mt-4 p-3 bg-purple-50 rounded-lg text-sm text-purple-800">
-            You're on the beta plan with full access to all features. When beta ends, you'll choose a paid plan or continue on Starter (free). We'll give you 30 days' notice.
-          </div>
-        )}
-      </div>
-
-      {/* Billing cycle toggle */}
-      <div className="flex items-center justify-center gap-1 mb-6">
-        <div className="inline-flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-          <button onClick={() => setBillingCycle('monthly')}
-            className={`px-4 py-1.5 rounded-md text-sm transition-colors ${billingCycle === 'monthly' ? 'bg-white shadow-sm text-gray-900 font-medium' : 'text-gray-500'}`}>
-            Monthly
-          </button>
-          <button onClick={() => setBillingCycle('annual')}
-            className={`px-4 py-1.5 rounded-md text-sm transition-colors ${billingCycle === 'annual' ? 'bg-white shadow-sm text-gray-900 font-medium' : 'text-gray-500'}`}>
-            Annual <span className="text-xs text-green-600">Save 20%</span>
-          </button>
+          {org?.plan_tier !== 'starter' && org?.plan_tier !== 'beta' && <button onClick={downgrade} className="text-xs text-red-500 hover:underline">Downgrade to Free</button>}
         </div>
       </div>
 
-      {/* Plan cards */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {plans.map(plan => {
-          const planIndex = ['starter', 'growth', 'scale', 'enterprise'].indexOf(plan.tier)
-          const isCurrent = org?.plan_tier === plan.tier
-          const isDowngrade = !isBeta && planIndex < currentTierIndex
-          const price = billingCycle === 'monthly' ? plan.monthly : plan.annual
-
-          return (
-            <div key={plan.tier}
-              className={`bg-white rounded-xl p-5 ${
-                plan.popular ? 'ring-2 ring-purple-700 relative' : 'border border-gray-200'
-              }`}>
-              {plan.popular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-xs font-medium text-white"
-                  style={{ background: '#2b0548' }}>Most popular</div>
-              )}
-              <h3 className="text-sm font-medium text-gray-900">{plan.name}</h3>
-              <p className="text-xs text-gray-500 mb-3">{plan.desc}</p>
-              <div className="mb-4">
-                <span className="text-xl font-medium text-gray-900">{price}</span>
-                {price !== 'Free' && price !== 'Custom' && (
-                  <span className="text-xs text-gray-400">/user/mo</span>
-                )}
-              </div>
-
-              {isCurrent || (isBeta && plan.tier !== 'enterprise') ? (
-                <div className="py-2 text-center text-xs font-medium text-gray-400 border border-gray-200 rounded-lg mb-4">
-                  {isCurrent ? 'Current plan' : 'Included in beta'}
-                </div>
-              ) : plan.tier === 'enterprise' ? (
-                <a href="mailto:sarah@trailblazeafrica.com"
-                  className="block py-2 text-center text-xs font-medium border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 mb-4">
-                  Contact sales
-                </a>
-              ) : plan.tier === 'starter' ? (
-                <div className="py-2 text-center text-xs font-medium text-gray-400 border border-gray-200 rounded-lg mb-4">
-                  Free forever
-                </div>
-              ) : (
-                <button
-                  onClick={() => handleUpgrade(plan.tier)}
-                  disabled={!!processing}
-                  className="w-full py-2 rounded-lg text-xs font-medium disabled:opacity-50 mb-4"
-                  style={{ background: '#2b0548', color: '#e1b3ee' }}>
-                  {processing === plan.tier ? 'Processing...' : isDowngrade ? 'Downgrade' : 'Upgrade'}
-                </button>
-              )}
-
-              <ul className="space-y-1.5">
-                {plan.features.map(f => (
-                  <li key={f} className="flex items-start gap-1.5 text-xs text-gray-600">
-                    <span className="text-green-600 mt-0.5 flex-shrink-0">✓</span> {f}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )
-        })}
+      <div className="flex items-center justify-center gap-3 mb-6">
+        <span className={`text-sm ${cycle==='monthly'?'text-gray-900 font-medium':'text-gray-400'}`}>Monthly</span>
+        <button onClick={() => setCycle(c => c==='monthly'?'annual':'monthly')} className={`w-12 h-6 rounded-full transition-colors ${cycle==='annual'?'bg-purple-600':'bg-gray-300'}`}><div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${cycle==='annual'?'translate-x-6':'translate-x-0.5'}`}/></button>
+        <span className={`text-sm ${cycle==='annual'?'text-gray-900 font-medium':'text-gray-400'}`}>Annual <span className="text-xs text-green-600 font-medium">Save 20%</span></span>
       </div>
 
-      <p className="text-center text-xs text-gray-400 mt-6">
-        No annual lock-in. Ever. Cancel or change plans anytime.
-        Payments processed securely by Paystack.
-      </p>
+      <div className="grid md:grid-cols-3 gap-4 mb-8">
+        {plans.map(p => (
+          <div key={p.tier} className={`bg-white rounded-2xl border-2 p-5 relative ${p.popular?'border-purple-300':'border-gray-200'}`} style={p.popular?{boxShadow:'0 4px 20px rgba(90,24,144,0.1)'}:{}}>
+            {p.popular && <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[10px] font-semibold text-white" style={{background:'#5a1890'}}>Most popular</div>}
+            <h3 className="text-base font-semibold text-gray-900">{p.name}</h3>
+            <div className="mt-2 mb-4">{p.price===0?<span className="text-2xl font-bold">Free</span>:<><span className="text-2xl font-bold">₦{p.price.toLocaleString()}</span><span className="text-xs text-gray-500">/user/mo{cycle==='annual'?' (billed annually)':''}</span></>}</div>
+            <div className="space-y-2 mb-5">
+              {p.features.map(f => <div key={f} className="flex items-start gap-2 text-xs text-gray-700"><span className="text-green-500 mt-0.5">✓</span>{f}</div>)}
+              {p.excluded.map(f => <div key={f} className="flex items-start gap-2 text-xs text-gray-400"><span className="mt-0.5">—</span>{f}</div>)}
+            </div>
+            {org?.plan_tier===p.tier || (org?.plan_tier==='beta' && p.tier==='starter') ? ( 
+              <> 
+              <div className="w-full py-2.5 rounded-xl text-sm text-center border-2 border-gray-200 text-gray-400 font-medium">Current plan</div>
+             {org?.plan_tier !== 'starter' && (
+              <button
+                onClick={handleDowngrade}
+                className="text-xs text-red-500 hover:underline mt-2"
+              >
+                Downgrade to Free plan
+              </button>
+            )}
+          </>
+        
+            : canUp(p.tier) ? <button onClick={() => pay(p.tier)} disabled={!!processing} className="w-full py-2.5 rounded-xl text-sm font-medium disabled:opacity-50" style={p.popular?{background:'#2b0548',color:'#e1b3ee'}:{background:'#f3f4f6',color:'#374151'}}>{processing===p.tier?'Processing...': `Upgrade to ${p.name}`}</button>
+            : <div className="w-full py-2.5 rounded-xl text-sm text-center text-gray-400">—</div>}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-8">
+  <h3 className="text-sm font-semibold text-gray-900 mb-4">Payment history</h3>
+  {invoices.map(inv => (
+    <div key={inv.id} className="flex items-center justify-between py-3 border-b border-gray-100">
+      <div>
+        <div className="text-sm text-gray-900">{inv.invoice_number}</div>
+        <div className="text-xs text-gray-500">{new Date(inv.paid_at).toLocaleDateString('en-NG')}</div>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-medium">₦{Number(inv.amount).toLocaleString()}</span>
+        <a href={`/api/billing/invoice?id=${inv.id}`} target="_blank"
+          className="text-xs text-purple-700 hover:underline">View invoice</a>
+      </div>
+    </div>
+  ))}
+</div>
+
+
+      <div className="bg-gray-900 rounded-2xl p-6 mb-8 text-white flex items-center justify-between flex-wrap gap-3">
+        <div><h3 className="text-base font-semibold mb-1">Enterprise</h3><p className="text-sm text-gray-400">Custom pricing. Dedicated AM, SSO, white-label.</p></div>
+        <a href="mailto:sarah@trailblazeafrica.com?subject=Enterprise inquiry" className="px-5 py-2.5 bg-white text-gray-900 rounded-xl text-sm font-medium">Contact sales</a>
+      </div>
+
+      <AccessCodeEntry onSuccess={() => window.location.reload()} />
+
+      {invoices.length > 0 && (
+        <div className="mt-8"><h3 className="text-sm font-semibold text-gray-900 mb-4">Payment history</h3>
+          {invoices.map(inv => <div key={inv.id} className="flex items-center justify-between py-3 border-b border-gray-100"><div><div className="text-sm text-gray-900">{inv.invoice_number}</div><div className="text-xs text-gray-500">{new Date(inv.paid_at||inv.created_at).toLocaleDateString('en-NG')}</div></div><div className="flex items-center gap-3"><span className="text-sm font-medium">₦{Number(inv.amount).toLocaleString()}</span><a href={`/api/billing/invoice?id=${inv.id}`} target="_blank" className="text-xs text-purple-700 hover:underline">Invoice</a></div></div>)}
+        </div>
+      )}
+      <UpgradeModal />
+
     </div>
   )
 }

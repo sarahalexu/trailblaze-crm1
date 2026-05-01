@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   const { to_plan, reason } = await request.json()
   const toPlan = to_plan || 'starter'
 
-  const { data: org } = await supabase.from('organizations').select('plan_tier, subscription_status, paystack_subscription_code').eq('id', profile.org_id).single()
+  const { data: org } = await supabase.from('organizations').select('plan_tier, subscription_status, paystack_subscription_code, paystack_customer_code').eq('id', profile.org_id).single()
   if (!org) return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
 
   if (org.plan_tier === 'starter') {

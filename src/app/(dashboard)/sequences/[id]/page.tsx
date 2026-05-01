@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useParams, useRouter } from 'next/navigation'
+import { usePlanLimits } from '@/hooks/usePlanLimits'
 import Link from 'next/link'
 
 export default function SequenceDetailPage() {
@@ -14,6 +15,7 @@ export default function SequenceDetailPage() {
   const [enrollments, setEnrollments] = useState<any[]>([])
   const [contacts, setContacts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const { check, UpgradeModal } = usePlanLimits()
   const [activeTab, setActiveTab] = useState<'steps' | 'enrolled' | 'performance'>('steps')
   // Step form
   const [showAddStep, setShowAddStep] = useState(false)
@@ -86,6 +88,7 @@ export default function SequenceDetailPage() {
   }
 
   async function enrollContacts() {
+    if (!check('enroll_contact')) return
     if (selectedContacts.length === 0) return
     setSaving(true)
     const { data: { user } } = await supabase.auth.getUser()
@@ -388,6 +391,7 @@ export default function SequenceDetailPage() {
           </div>
         </div>
       )}
+      <UpgradeModal />
     </div>
   )
 }

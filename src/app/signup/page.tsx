@@ -5,6 +5,8 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import AccessCodeEntry from '@/components/ui/AccessCodeEntry'
+
 
 export default function SignupPage() {
   const [step, setStep] = useState(1)
@@ -239,6 +241,9 @@ export default function SignupPage() {
                     style={{ background: '#2b0548', color: '#e1b3ee' }}>
                     {loading ? 'Creating...' : 'Create workspace'}
                   </button>
+                  <div className="mt-6">
+  <AccessCodeEntry />
+</div>
                 </div>
               </>
             )}

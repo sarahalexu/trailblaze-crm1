@@ -5,7 +5,9 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Account, Contact, Interaction } from '@/lib/types'
 import Link from 'next/link'
+import { usePlanLimits } from '@/hooks/usePlanLimits'
 import { useParams } from 'next/navigation'
+import Icons from '@/components/ui/Icons'
 
 type TabKey = 'timeline' | 'contacts' | 'playbooks' | 'health'
 
@@ -24,6 +26,7 @@ export default function AccountDetailPage() {
   const [showInteractionModal, setShowInteractionModal] = useState(false)
   const [showPlaybookModal, setShowPlaybookModal] = useState(false)
   const [keepScores, setKeepScores] = useState({ k: 0, e: 0, ex: 0, p: 0 })
+  const { check, UpgradeModal } = usePlanLimits()
   // Interaction form
   const [intChannel, setIntChannel] = useState('call')
   const [intDirection, setIntDirection] = useState('outbound')
@@ -178,6 +181,7 @@ export default function AccountDetailPage() {
   }
 
   async function runAI(action: string) {
+    if (!check('use_ai')) return
     setAiLoading(true); setAiAction(action); setShowAiPanel(true); setAiResult('')
     try {
       const res = await fetch('/api/ai/analyze', {
@@ -220,8 +224,8 @@ export default function AccountDetailPage() {
             </div>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={() => runAI('risk_analysis')} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5" title="AI Risk Analysis">
-              <span>🤖</span> Risk analysis
+            <button onClick={() => runAI('risk_analysis')} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5" title="AI Risk Analysis"> 
+              <Icons.ai className="w-4 h-4" /> Risk analysis
             </button>
             <button onClick={() => runAI('next_action')} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5" title="AI Next Action">
               <span>💡</span> Suggest action
@@ -229,8 +233,8 @@ export default function AccountDetailPage() {
             <button onClick={() => runAI('draft_message')} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5" title="AI Draft Message">
               <span>✍️</span> Draft message
             </button>
-            <button onClick={() => setShowScoreModal(true)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Update KEEP</button>
-            <button onClick={() => setShowInteractionModal(true)} className="px-3 py-2 rounded-lg text-sm font-medium" style={{ background: '#2b0548', color: '#e1b3ee' }}>+ Log interaction</button>
+            <button onClick={() => setShowScoreModal(true)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-1.5"><Icons.heart className="w-4 h-4" /> Update KEEP</button>
+            <button onClick={() => setShowInteractionModal(true)} className="px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5" style={{ background: '#2b0548', color: '#e1b3ee' }}><Icons.plus className="w-4 h-4" /> Log interaction</button>
           </div>
         </div>
 
@@ -576,6 +580,7 @@ export default function AccountDetailPage() {
           </div>
         </div>
       )}
+      <UpgradeModal />
     </div>
   )
 }

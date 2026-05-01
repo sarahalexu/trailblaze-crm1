@@ -3,7 +3,9 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { usePlanLimits } from '@/hooks/usePlanLimits'
 import Link from 'next/link'
+
 
 interface ParsedRow { name: string; industry?: string; website?: string; contract_value?: string; renewal_date?: string; contact_name?: string; contact_email?: string; contact_phone?: string }
 
@@ -15,7 +17,9 @@ export default function ImportAccountsPage() {
   const [step, setStep] = useState<'upload' | 'map' | 'preview' | 'importing' | 'done'>('upload')
   const [imported, setImported] = useState(0)
   const [errors, setErrors] = useState<string[]>([])
+  const { check, UpgradeModal } = usePlanLimits()
   const supabase = createClient()
+
 
   const targetFields = [
     { key: 'name', label: 'Company name *', required: true },
@@ -86,6 +90,7 @@ export default function ImportAccountsPage() {
   }
 
   async function startImport() {
+    if (!check('create_account')) return
     if (!mapping['name']) { alert('You must map the Company name field.'); return }
     setStep('importing')
     const { data: { user } } = await supabase.auth.getUser()
@@ -257,6 +262,7 @@ export default function ImportAccountsPage() {
           <Link href="/accounts" className="tb-btn-primary inline-block">View your accounts</Link>
         </div>
       )}
+      <UpgradeModal />
     </div>
   )
 }

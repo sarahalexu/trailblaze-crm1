@@ -3,7 +3,9 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { usePlanLimits } from '@/hooks/usePlanLimits'
 import Link from 'next/link'
+
 
 export default function SequencesPage() {
   const [sequences, setSequences] = useState<any[]>([])
@@ -15,7 +17,9 @@ export default function SequencesPage() {
   const [senderName, setSenderName] = useState('')
   const [senderEmail, setSenderEmail] = useState('')
   const [saving, setSaving] = useState(false)
-  const supabase = createClient()
+  const { check, UpgradeModal } = usePlanLimits()
+ const supabase = createClient()
+
 
   useEffect(() => { load() }, [])
 
@@ -36,6 +40,7 @@ export default function SequencesPage() {
   }
 
   async function createSequence() {
+    if (!check('create_sequence')) return
     if (!newName) return
     setSaving(true)
     const { data: { user } } = await supabase.auth.getUser()
@@ -148,7 +153,10 @@ export default function SequencesPage() {
               </div>
               <div>
                 <label className="block text-sm text-gray-600 mb-1">Channel</label>
-                <select value={newChannel} onChange={e => setNewChannel(e.target.value)}
+                <select value={newChannel} onChange={e =>  {
+                if (e.target.value === 'whatsapp' && !check('whatsapp_sequence')) return
+                setNewChannel(e.target.value)
+                }}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white">
                   <option value="email">Email only</option>
                   <option value="whatsapp">WhatsApp only</option>
@@ -180,6 +188,7 @@ export default function SequencesPage() {
           </div>
         </div>
       )}
+      <UpgradeModal />
     </div>
   )
 }

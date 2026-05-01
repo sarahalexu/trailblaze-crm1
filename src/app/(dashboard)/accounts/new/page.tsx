@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { usePlanLimits } from '@/hooks/usePlanLimits'
 import Link from 'next/link'
 
 export default function NewAccountPage() {
@@ -17,14 +18,18 @@ export default function NewAccountPage() {
   const [contactWhatsApp, setContactWhatsApp] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const { check, UpgradeModal } = usePlanLimits()
   const supabase = createClient()
   const router = useRouter()
+
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!name) return
+    if (!check('create_account')) return
     setSaving(true)
     setError('')
+
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
@@ -149,6 +154,8 @@ export default function NewAccountPage() {
           </button>
         </div>
       </form>
+   
+      <UpgradeModal />
     </div>
   )
 }

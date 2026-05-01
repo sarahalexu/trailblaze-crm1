@@ -9,28 +9,29 @@ import type { User, Organization } from '@/lib/types'
 import { getVisibleNavItems } from '@/lib/rbac'
 import GuidedTooltips from '@/components/ui/GuidedTooltips'
 import ProductTour from '@/components/ui/ProductTour'
+import Icons from '@/components/ui/Icons'
 
 const allNavItems = [
   { label: 'Overview', items: [
-    { name: 'Dashboard', href: '/dashboard', icon: '⬡' },
-    { name: 'Retention pipeline', href: '/pipeline/retention', icon: '⟲' },
-    { name: 'Sales pipeline', href: '/pipeline/sales', icon: '◈' },
+    { name: 'Dashboard', href: '/dashboard', icon: Icons.dashboard },
+    { name: 'Retention pipeline', href: '/pipeline/retention', icon: Icons.retention },
+    { name: 'Sales pipeline', href: '/pipeline/sales', icon: Icons.sales },
   ]},
   { label: 'Manage', items: [
-    { name: 'Accounts', href: '/accounts', icon: '◎' },
-    { name: 'Contacts', href: '/contacts', icon: '⊕' },
-    { name: 'Interactions', href: '/interactions', icon: '↗' },
-    { name: 'Sequences', href: '/sequences', icon: '⚡' },
-    { name: 'Playbooks', href: '/playbooks', icon: '▤' },
-    { name: 'Snippets', href: '/snippets', icon: '✦' },
+    { name: 'Accounts', href: '/accounts', icon: Icons.accounts },
+    { name: 'Contacts', href: '/contacts', icon: Icons.contacts },
+    { name: 'Interactions', href: '/interactions', icon: Icons.interactions },
+    { name: 'Sequences', href: '/sequences', icon: Icons.sequences },
+    { name: 'Playbooks', href: '/playbooks', icon: Icons.playbooks },
+    { name: 'Snippets', href: '/snippets', icon: Icons.snippets },
   ]},
   { label: 'Insights', items: [
-    { name: 'Reports', href: '/reports', icon: '◧' },
-    { name: 'Revenue at risk', href: '/reports/revenue-at-risk', icon: '△' },
+    { name: 'Reports', href: '/reports', icon: Icons.reports },
+    { name: 'Revenue at risk', href: '/reports/revenue-at-risk', icon: Icons.risk },
   ]},
   { label: 'Support', items: [
-    { name: 'Help centre', href: '/help', icon: '○' },
-    { name: 'Settings', href: '/settings', icon: '⚙' },
+    { name: 'Help centre', href: '/help', icon: Icons.help },
+    { name: 'Settings', href: '/settings', icon: Icons.settings },
   ]},
 ]
 
@@ -141,9 +142,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex items-center gap-3">
           {/* Notifications */}
           <Link href="/notifications" className="relative p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
-            </svg>
+            <Icons.bell className="w-5 h-5 text-gray-500 hover:text-gray-700 transition-colors cursor-pointer" />
             {notifCount > 0 && (
               <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-medium rounded-full flex items-center justify-center">
                 {notifCount > 9 ? '9+' : notifCount}
@@ -185,7 +184,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       }`}
                       onClick={() => { if (window.innerWidth < 1024) setSidebarOpen(false) }}
                     >
-                      <span className="w-4 text-center text-xs opacity-60">{item.icon}</span>
+                      <span className="opacity-50 group-hover:opacity-80 transition-opacity">{item.icon({ className: 'w-[18px] h-[18px]' })}</span>
                       {item.name}
                     </Link>
                   )
@@ -207,10 +206,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <Link href="/settings/billing" className="text-xs text-purple-700 hover:underline">Upgrade</Link>
               )}
             </div>
-            <button onClick={toggleDarkMode}
-              className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 w-full">
-              <span>{darkMode ? '☀️' : '🌙'}</span>
-              <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
+            <button onClick={toggleDarkMode} className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 w-full">
+             {darkMode ? <Icons.sun className="w-4 h-4" /> : <Icons.moon className="w-4 h-4" />}
+             <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
             </button>
           </div>
         </aside>
