@@ -114,23 +114,38 @@ export default function BillingPage() {
               {p.features.map(f => <div key={f} className="flex items-start gap-2 text-xs text-gray-700"><span className="text-green-500 mt-0.5">✓</span>{f}</div>)}
               {p.excluded.map(f => <div key={f} className="flex items-start gap-2 text-xs text-gray-400"><span className="mt-0.5">—</span>{f}</div>)}
             </div>
-            {org?.plan_tier===p.tier || (org?.plan_tier==='beta' && p.tier==='starter') ? ( 
-              <> 
-              <div className="w-full py-2.5 rounded-xl text-sm text-center border-2 border-gray-200 text-gray-400 font-medium">Current plan</div>
-             {org?.plan_tier !== 'starter' && (
-              <button
-                onClick={handleDowngrade}
-                className="text-xs text-red-500 hover:underline mt-2"
-              >
-                Downgrade to Free plan
-              </button>
-            )}
-          </>
-        
-            : canUp(p.tier) ? <button onClick={() => pay(p.tier)} disabled={!!processing} className="w-full py-2.5 rounded-xl text-sm font-medium disabled:opacity-50" style={p.popular?{background:'#2b0548',color:'#e1b3ee'}:{background:'#f3f4f6',color:'#374151'}}>{processing===p.tier?'Processing...': `Upgrade to ${p.name}`}</button>
-            : <div className="w-full py-2.5 rounded-xl text-sm text-center text-gray-400">—</div>}
-          </div>
-        ))}
+            {org?.plan_tier===p.tier || (org?.plan_tier==='beta' && p.tier==='starter') ? (
+  <>
+    <div className="w-full py-2.5 rounded-xl text-sm text-center border-2 border-gray-200 text-gray-400 font-medium">
+      Current plan
+    </div>
+
+    {org?.plan_tier !== 'starter' && (
+      <button
+        onClick={handleDowngrade}
+        className="text-xs text-red-500 hover:underline mt-2"
+      >
+        Downgrade to Free plan
+      </button>
+    )}
+  </>
+) : canUp(p.tier) ? (
+  <button
+    onClick={() => pay(p.tier)}
+    disabled={!!processing}
+    className="w-full py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
+    style={p.popular
+      ? { background:'#2b0548', color:'#e1b3ee' }
+      : { background:'#f3f4f6', color:'#374151' }
+    }
+  >
+    {processing===p.tier ? 'Processing...' : `Upgrade to ${p.name}`}
+  </button>
+) : (
+  <div className="w-full py-2.5 rounded-xl text-sm text-center text-gray-400">
+    —
+  </div>
+)}
       </div>
 
       <div className="mt-8">
