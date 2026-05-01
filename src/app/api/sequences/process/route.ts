@@ -3,6 +3,7 @@
 // Called every hour by external cron (cron-job.org)
 
 import { getAdminClient } from '@/lib/supabase/admin'
+import Icons from '@/components/ui/Icons'
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
 
