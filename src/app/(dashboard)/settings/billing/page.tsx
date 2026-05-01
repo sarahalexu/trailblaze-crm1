@@ -147,6 +147,7 @@ export default function BillingPage() {
   </div>
 )}
       </div>
+      ))}
 
       <div className="mt-8">
   <h3 className="text-sm font-semibold text-gray-900 mb-4">Payment history</h3>
@@ -173,11 +174,6 @@ export default function BillingPage() {
 
       <AccessCodeEntry onSuccess={() => window.location.reload()} />
 
-      {invoices.length > 0 && (
-        <div className="mt-8"><h3 className="text-sm font-semibold text-gray-900 mb-4">Payment history</h3>
-          {invoices.map(inv => <div key={inv.id} className="flex items-center justify-between py-3 border-b border-gray-100"><div><div className="text-sm text-gray-900">{inv.invoice_number}</div><div className="text-xs text-gray-500">{new Date(inv.paid_at||inv.created_at).toLocaleDateString('en-NG')}</div></div><div className="flex items-center gap-3"><span className="text-sm font-medium">₦{Number(inv.amount).toLocaleString()}</span><a href={`/api/billing/invoice?id=${inv.id}`} target="_blank" className="text-xs text-purple-700 hover:underline">Invoice</a></div></div>)}
-        </div>
-      )}
       <UpgradeModal />
 
     </div>
