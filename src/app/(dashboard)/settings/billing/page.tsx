@@ -82,7 +82,18 @@ export default function BillingPage() {
     { tier:'scale', name:'Scale', price:cycle==='annual'?36000:45000, features:['50 users','Unlimited accounts','Unlimited sequences','1,000 emails/day','Advanced analytics','Custom playbooks','Stakeholder mapping','API access'], excluded:[] },
   ]
 
-  const canUp = (t: string) => { const o2 = ['starter','growth','scale']; return o2.indexOf(t) > o2.indexOf(org?.plan_tier==='beta'?'scale':org?.plan_tier||'starter') }
+  const canUp = (t: string) => {
+    const o2 = ['starter', 'growth', 'scale']
+  
+    return (
+      o2.indexOf(t) >
+      o2.indexOf(
+        org?.plan_tier === 'beta'
+          ? 'scale'
+          : org?.plan_tier || 'starter'
+      )
+    )
+  }
 
   return (
     <div className="max-w-4xl">
@@ -94,7 +105,7 @@ export default function BillingPage() {
             <div className="flex items-center gap-2 mb-1"><h3 className="text-sm font-medium text-gray-900">Current plan</h3><span className="text-xs px-2.5 py-0.5 rounded-full font-medium capitalize" style={{background:'rgba(90,24,144,0.08)',color:'#5a1890'}}>{org?.plan_tier==='beta'?'Beta (all features)':org?.plan_tier}</span></div>
             <p className="text-xs text-gray-500">{users} user{users!==1?'s':''} · {org?.name}{org?.access_expires_at ? ` · Access expires ${new Date(org.access_expires_at).toLocaleDateString('en-NG')}` : ''}</p>
           </div>
-          {org?.plan_tier !== 'starter' && org?.plan_tier !== 'beta' && <button onClick={downgrade} className="text-xs text-red-500 hover:underline">Downgrade to Free</button>}
+          {org?.plan_tier !== 'starter' && org?.plan_tier !== 'beta' && <button onClick={handleDowngrade} className="text-xs text-red-500 hover:underline">Downgrade to Free</button>}
         </div>
       </div>
 
@@ -148,6 +159,7 @@ export default function BillingPage() {
 )}
       </div>
       ))}
+      </div>
 
       <div className="mt-8">
   <h3 className="text-sm font-semibold text-gray-900 mb-4">Payment history</h3>
