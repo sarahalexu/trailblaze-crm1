@@ -21,7 +21,7 @@ export async function GET(request: Request) {
   // Find users with birthdays today
   const { data: birthdayUsers } = await supabaseAdmin
     .from('users')
-    .select('id, full_name, email, org_id')
+    .select('id, full_name, email, org_id, date_of_birth')
     .not('date_of_birth', 'is', null)
 
   const birthdayPeople = (birthdayUsers || []).filter(u => {
