@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 export async function POST(request: Request) {
   const supabaseAdmin = getAdminClient()
   try {
-    const { auth_id, full_name, email, org_name, industry } = await request.json()
+    const { auth_id, full_name, email, date_of_birth, org_name, industry } = await request.json()
     if (!auth_id || !full_name || !email || !org_name) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     const { data: org, error: orgError } = await supabaseAdmin.from('organizations').insert({ name: org_name, slug, industry, plan_tier: 'beta', subscription_status: 'beta' }).select().single()
     if (orgError) throw orgError
 
-    const { error: userError } = await supabaseAdmin.from('users').insert({ org_id: org.id, auth_id, email, full_name, role: 'admin' })
+    const { error: userError } = await supabaseAdmin.from('users').insert({ org_id: org.id, auth_id, email, full_name, date_of_birth, role: 'admin' })
     if (userError) throw userError
 
     const { error: setupError } = await supabaseAdmin.rpc('setup_new_organization', { p_org_id: org.id, p_plan_tier: 'beta' })
