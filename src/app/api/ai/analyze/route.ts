@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   if (!prompts[action]) return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
 
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompts[action] }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 600 } }),
     })
