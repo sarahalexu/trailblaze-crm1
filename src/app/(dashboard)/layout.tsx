@@ -1,6 +1,7 @@
 // src/app/(dashboard)/layout.tsx
 'use client'
 
+import InactivityLogout from '@/components/InactivityLogout'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, usePathname } from 'next/navigation'
@@ -9,7 +10,6 @@ import type { User, Organization } from '@/lib/types'
 import { getVisibleNavItems } from '@/lib/rbac'
 import GuidedTooltips from '@/components/ui/GuidedTooltips'
 import ProductTour from '@/components/ui/ProductTour'
-import InactivityLogout from '@/components/ui/InactivityLogout'
 import Icons from '@/components/ui/Icons'
 
 const allNavItems = [
@@ -213,6 +213,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
             </button>
           </Link>
+          </aside>
 
         {/* Mobile overlay */}
         {sidebarOpen && (
