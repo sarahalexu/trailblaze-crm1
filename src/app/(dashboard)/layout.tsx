@@ -167,7 +167,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1">
         {/* Sidebar */}
         <aside className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:static inset-y-14 left-0 z-20 w-52 bg-white border-r border-gray-200 overflow-y-auto transition-transform duration-200`}>
           <nav className="py-4">

@@ -284,7 +284,7 @@ export default function AccountDetailPage() {
               <span className="text-sm text-gray-500">Analyzing {account.name}...</span>
             </div>
           ) : (
-            <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto">{aiResult}</div>
+            <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap max-h-[500px] overflow-y-auto">{aiResult}</div>
           )}
           {!aiLoading && aiAction === 'draft_message' && aiResult && (
             <button onClick={() => { navigator.clipboard.writeText(aiResult) }} className="mt-3 px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
