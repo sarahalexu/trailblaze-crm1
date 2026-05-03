@@ -53,8 +53,6 @@ function LoginForm() {
             <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center text-white font-semibold text-lg">TB</div>
             <span className="text-white text-xl font-medium">TrailBlaze CRM</span>
           </div>
-          <span className="inline-block mt-2 px-3 py-1 rounded-full text-xs font-medium"
-            style={{ background: '#c9a54e', color: '#2b0548' }}>BETA</span>
         </div>
 
         <div className="space-y-8">

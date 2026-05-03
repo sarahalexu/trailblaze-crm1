@@ -9,6 +9,7 @@ import type { User, Organization } from '@/lib/types'
 import { getVisibleNavItems } from '@/lib/rbac'
 import GuidedTooltips from '@/components/ui/GuidedTooltips'
 import ProductTour from '@/components/ui/ProductTour'
+import InactivityLogout from '@/components/ui/InactivityLogout'
 import Icons from '@/components/ui/Icons'
 
 const allNavItems = [
@@ -109,6 +110,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
+      <InactivityLogout />
+
       {/* Top bar */}
       <header className="h-14 border-b border-gray-200 bg-white flex items-center justify-between px-4 lg:px-6 flex-shrink-0 z-10">
         <div className="flex items-center gap-3">
@@ -194,24 +197,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </nav>
 
           {/* Plan badge at bottom */}
-          <div className="px-5 py-4 border-t border-gray-200">
+        <Link href="/settings/billing" className="block px-5 py-4 border-t border-gray-200 hover:bg-gray-50 transition-colors">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <div className="text-xs text-gray-500 mb-0.5">Current plan</div>
                 <span className="text-sm font-medium capitalize" style={{ color: '#5a1890' }}>
-                  {org?.plan_tier || 'Beta'}
+                  {org?.plan_tier || 'Starter'}
                 </span>
               </div>
-              {org?.plan_tier === 'starter' && (
-                <Link href="/settings/billing" className="text-xs text-purple-700 hover:underline">Upgrade</Link>
-              )}
+              <span className="text-xs text-purple-700">View plans →</span>
             </div>
-            <button onClick={toggleDarkMode} className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 w-full">
-             {darkMode ? <Icons.sun className="w-4 h-4" /> : <Icons.moon className="w-4 h-4" />}
-             <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
+            <button onClick={(e) => { e.preventDefault(); toggleDarkMode() }}
+              className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 w-full">
+              <span>{darkMode ? '☀️' : '🌙'}</span>
+              <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
             </button>
-          </div>
-        </aside>
+          </Link>
 
         {/* Mobile overlay */}
         {sidebarOpen && (

@@ -18,6 +18,7 @@ export default function NewAccountPage() {
   const [contactWhatsApp, setContactWhatsApp] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [notes, setNotes] = useState('')
   const { check, UpgradeModal } = usePlanLimits()
   const supabase = createClient()
   const router = useRouter()
@@ -52,6 +53,7 @@ export default function NewAccountPage() {
       website: website || null,
       contract_value_annual: contractValue ? parseFloat(contractValue) : null,
       renewal_date: renewalDate || null,
+      notes: notes || null,
       assigned_user_id: profile.id,
       pipeline_id: pipeline?.id,
       stage_id: stageId,
@@ -123,6 +125,13 @@ export default function NewAccountPage() {
               <input type="date" value={renewalDate} onChange={e => setRenewalDate(e.target.value)}
                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
             </div>
+
+            <div>
+                <label className="block text-sm text-gray-600 mb-1">Notes</label>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+                  placeholder="Any context about this account..."
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
           </div>
         </div>
 

@@ -258,11 +258,16 @@ export default function AccountDetailPage() {
           <div><span className="text-gray-500">Renewal:</span> <span className="font-medium">{formatDate(account.renewal_date)}</span></div>
           <div><span className="text-gray-500">Last contact:</span> <span className="font-medium">{formatDate(account.last_interaction_at)}</span></div>
         </div>
+        {account.notes && (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <p className="text-sm text-gray-600">{account.notes}</p>
+          </div>
+        )}
       </div>
 
       {/* AI Result Panel */}
       {showAiPanel && (
-        <div className="bg-white border border-purple-200 rounded-xl p-5 mb-6" style={{ animation: 'slideUp 0.2s ease' }}>
+        <div className="bg-white border border-purple-200 rounded-xl p-5 mb-6 max-h-none overflow-visible" style={{ animation: 'slideUp 0.2s ease' }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <span className="text-sm">🤖</span>
@@ -279,7 +284,7 @@ export default function AccountDetailPage() {
               <span className="text-sm text-gray-500">Analyzing {account.name}...</span>
             </div>
           ) : (
-            <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{aiResult}</div>
+            <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto">{aiResult}</div>
           )}
           {!aiLoading && aiAction === 'draft_message' && aiResult && (
             <button onClick={() => { navigator.clipboard.writeText(aiResult) }} className="mt-3 px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
