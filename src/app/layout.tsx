@@ -19,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <OfflineIndicator />
         {children}
         <CookieConsent />
+        <FeedbackButton />
       </body>
     </html>
   )

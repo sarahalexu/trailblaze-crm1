@@ -4,6 +4,20 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
+<div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+  <div className="flex items-center justify-between">
+    <div>
+      <h3 className="text-sm font-medium text-gray-900">Account Health Report</h3>
+      <p className="text-xs text-gray-500 mt-0.5">Download a comprehensive PDF report of all accounts, health scores, revenue at risk, and activity.</p>
+    </div>
+    <a href="/api/reports/pdf" target="_blank"
+      className="px-4 py-2 rounded-lg text-sm font-medium flex-shrink-0"
+      style={{ background: '#2b0548', color: '#e1b3ee' }}>
+      Download Report
+    </a>
+  </div>
+</div>
+
 export default function ReportsPage() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)

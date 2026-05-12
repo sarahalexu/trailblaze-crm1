@@ -115,13 +115,14 @@ export async function GET(request: Request) {
 
           // Send via MailerLite transactional API or fallback
           // For now, log the send — actual SMTP integration comes with MailerLite setup
-          const mailResponse = await sendEmail({
-            from: `${sequence.sender_name} <${sequence.sender_email}>`,
-            to: recipientEmail,
-            subject: renderedSubject,
-            html: htmlMessage,
-            text: renderedMessage,
-          })
+          const mailResponse = await sendEmail(
+            recipientEmail,
+            contactName,
+            sequence.sender_email,
+            sequence.sender_name,
+            renderedSubject,
+            htmlMessage
+          )
 
           sendSuccess = mailResponse.success
           messageId = mailResponse.messageId || trackingId
@@ -272,14 +273,61 @@ export async function GET(request: Request) {
   }
 }
 
-// Email sending helper — uses MailerLite transactional API
-async function sendEmail(params: {
-  from: string
-  to: string
-  subject: string
+// Email sending helper — uses Brevo API
+async function sendEmail(
+  to: string,
+  toName: string,
+  from: string,
+  fromName: string,
+  subject: string,
   html: string
-  text: string
-}): Promise<{ success: boolean; messageId?: string }> {
+): Promise<{ success: boolean; messageId?: string }> {
+  const apiKey = process.env.MAILERLITE_API_KEY
+
+  if (!apiKey) {
+    console.error('No email API key configured')
+    return { success: false }
+  }
+
+  try {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sender: {
+          name: fromName,
+          email: from,
+        },
+        to: [
+          {
+            email: to,
+            name: toName,
+          },
+        ],
+        subject: subject,
+        htmlContent: html,
+      }),
+    })
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      console.error('Brevo error:', data)
+      return { success: false }
+    }
+
+    return {
+      success: true,
+      messageId: data.messageId || `brevo_${Date.now()}`,
+    }
+  } catch (e) {
+    console.error('Email send failed:', e)
+    return { success: false }
+  }
+}
   const apiKey = process.env.MAILERLITE_API_KEY
 
   if (!apiKey) {

@@ -267,33 +267,44 @@ export default function AccountDetailPage() {
 
       {/* AI Result Panel */}
       {showAiPanel && (
-        <div className="bg-white border border-purple-200 rounded-xl p-5 mb-6 max-h-none overflow-visible" style={{ animation: 'slideUp 0.2s ease' }}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm">🤖</span>
-              <h3 className="text-sm font-medium text-gray-900">
-                {aiAction === 'risk_analysis' ? 'Risk Analysis' : aiAction === 'draft_message' ? 'Draft Message' : 'Suggested Next Action'}
-              </h3>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">AI-powered</span>
-            </div>
-            <button onClick={() => setShowAiPanel(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
-          </div>
-          {aiLoading ? (
-            <div className="flex items-center gap-3 py-4">
-              <div className="tb-spinner" style={{ width: '20px', height: '20px', borderWidth: '2px' }}></div>
-              <span className="text-sm text-gray-500">Analyzing {account.name}...</span>
-            </div>
-          ) : (
-            <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap max-h-[500px] overflow-y-auto">{aiResult}</div>
-          )}
-          {!aiLoading && aiAction === 'draft_message' && aiResult && (
-            <button onClick={() => { navigator.clipboard.writeText(aiResult) }} className="mt-3 px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
-              Copy message
-            </button>
-          )}
-        </div>
-      )}
-
+  <div className="bg-white border border-purple-200 rounded-xl p-5 mb-6">
+    <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center gap-2">
+        <span className="text-sm">🤖</span>
+        <h3 className="text-sm font-medium text-gray-900">
+          {aiAction === 'risk_analysis' ? 'Risk Analysis' : aiAction === 'draft_message' ? 'Draft Message' : 'Suggested Next Action'}
+        </h3>
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">AI-powered</span>
+      </div>
+      <button onClick={() => setShowAiPanel(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
+    </div>
+    {aiLoading ? (
+      <div className="flex items-center gap-3 py-4">
+        <div className="w-5 h-5 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin"></div>
+        <span className="text-sm text-gray-500">Analyzing {account.name}...</span>
+      </div>
+    ) : (
+      <div className="text-sm text-gray-700 leading-relaxed prose prose-sm max-w-none"
+  dangerouslySetInnerHTML={{ __html: aiResult
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/^### (.+)$/gm, '<h4 class="font-semibold text-gray-900 mt-3 mb-1">$1</h4>')
+    .replace(/^## (.+)$/gm, '<h3 class="font-semibold text-gray-900 mt-4 mb-1">$1</h3>')
+    .replace(/^# (.+)$/gm, '<h2 class="font-semibold text-gray-900 mt-4 mb-2">$1</h2>')
+    .replace(/^- (.+)$/gm, '<div class="flex gap-2 ml-2"><span class="text-purple-500">•</span><span>$1</span></div>')
+    .replace(/^\d+\. (.+)$/gm, '<div class="flex gap-2 ml-2"><span class="text-purple-500 font-medium">$&</span></div>')
+    .replace(/\n\n/g, '<br/><br/>')
+    .replace(/\n/g, '<br/>')
+  }}
+/>
+    )}
+    {!aiLoading && aiAction === 'draft_message' && aiResult && (
+      <button onClick={() => navigator.clipboard.writeText(aiResult)} className="mt-3 px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
+        Copy message
+      </button>
+    )}
+  </div>
+)}
       {/* Tabs */}
       <div className="flex gap-0 border-b border-gray-200 mb-5 overflow-x-auto">
         {([{ key: 'timeline' as TabKey, label: `Timeline (${interactions.length})` }, { key: 'contacts' as TabKey, label: `Contacts (${contacts.length})` }, { key: 'playbooks' as TabKey, label: `Playbooks (${assignments.filter(a => a.status === 'in_progress').length})` }, { key: 'health' as TabKey, label: 'Health history' }]).map(tab => (
