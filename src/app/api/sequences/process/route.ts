@@ -110,7 +110,20 @@ export async function GET(request: Request) {
           const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://crm.trailblazeafrica.com'
           const trackingPixel = `<img src="${appUrl}/api/track/open?t=${trackingId}" width="1" height="1" style="display:none" />`
           const unsubscribeUrl = `${appUrl}/api/sequences/unsubscribe?eid=${enrollment.id}&cid=${enrollment.contact_id}`
-          const unsubscribeFooter = `<div style="margin-top:32px;padding-top:16px;border-top:1px solid #eee;font-size:11px;color:#999;line-height:1.5">If you no longer wish to receive these messages, <a href="${unsubscribeUrl}" style="color:#999;text-decoration:underline">unsubscribe here</a>.</div>`
+          const unsubscribeFooter = `
+          <div style="
+  margin-top:32px;
+  padding-top:16px;
+  border-top:1px solid #f3f3f3;
+  font-size:10px;
+  color:#cfcfcf;
+  line-height:1.5;
+">
+  If you no longer wish to receive these messages,
+  <a href="${unsubscribeUrl}" style="color:#cfcfcf;text-decoration:none;">
+    unsubscribe here
+  </a>.
+</div>`
           const htmlMessage = renderedMessage.replace(/\n/g, '<br>') + unsubscribeFooter + trackingPixel
 
           // Send via MailerLite transactional API or fallback
@@ -328,39 +341,4 @@ async function sendEmail(
     return { success: false }
   }
 }
-  const apiKey = process.env.MAILERLITE_API_KEY
-
-  if (!apiKey) {
-    console.log('[Sequence Email] Would send:', { to: params.to, subject: params.subject })
-    // In development/before MailerLite is connected, log but report success
-    // This lets sequences advance through steps even without email configured
-    return { success: true, messageId: `dev_${Date.now()}` }
-  }
-
-  try {
-    // MailerLite transactional email API
-    const response = await fetch('https://connect.mailerlite.com/api/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: { email: params.from.match(/<(.+)>/)?.[1] || params.from, name: params.from.match(/^(.+) </)?.[1] || '' },
-        to: [{ email: params.to }],
-        subject: params.subject,
-        html: params.html,
-        text: params.text,
-      }),
-    })
-
-    if (response.ok) {
-      const data = await response.json()
-      return { success: true, messageId: data.id || `ml_${Date.now()}` }
-    }
-
-    return { success: false }
-  } catch {
-    return { success: false }
-  }
-}
+  

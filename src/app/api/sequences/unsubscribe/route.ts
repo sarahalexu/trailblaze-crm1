@@ -48,7 +48,3 @@ function renderPage(message: string, success: boolean): string {
 h1{font-size:18px;color:#111;margin-bottom:8px}p{font-size:14px;color:#666;line-height:1.6}
 </style></head><body><div class="box"><div class="icon">${success ? '✓' : '⚠'}</div><h1>${success ? 'Unsubscribed' : 'Error'}</h1><p>${message}</p></div></body></html>`
 }
-
-<p style="font-size:10px;color:#ccc;margin-top:30px;">
-  If you prefer not to receive these messages, <a href="UNSUBSCRIBE_URL" style="color:#ccc;">click here</a>.
-</p>
