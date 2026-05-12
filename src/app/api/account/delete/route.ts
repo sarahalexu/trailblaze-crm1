@@ -17,9 +17,31 @@ export async function DELETE() {
   const orgId = profile.org_id
 
   try {
-    await supabaseAdmin.from('playbook_step_progress').delete().in('assignment_id', (await supabaseAdmin.from('playbook_assignments').select('id').eq('org_id', orgId)).data?.map(t => t.id) || [])
+    const { data: assignments } = await supabaseAdmin
+  .from('playbook_assignments')
+  .select('id')
+  .eq('org_id', orgId)
+
+await supabaseAdmin
+  .from('playbook_step_progress')
+  .delete()
+  .in(
+    'assignment_id',
+    (assignments ?? []).map((t: any) => t.id)
+  )
     await supabaseAdmin.from('playbook_assignments').delete().eq('org_id', orgId)
-    await supabaseAdmin.from('ticket_messages').delete().in('ticket_id', (await supabaseAdmin.from('support_tickets').select('id').eq('org_id', orgId)).data?.map(t => t.id) || [])
+    const { data: tickets } = await supabaseAdmin
+  .from('support_tickets')
+  .select('id')
+  .eq('org_id', orgId)
+
+await supabaseAdmin
+  .from('ticket_messages')
+  .delete()
+  .in(
+    'ticket_id',
+    (tickets ?? []).map((t: any) => t.id)
+  )
     await supabaseAdmin.from('support_tickets').delete().eq('org_id', orgId)
     await supabaseAdmin.from('whatsapp_messages').delete().eq('org_id', orgId)
     await supabaseAdmin.from('whatsapp_config').delete().eq('org_id', orgId)
