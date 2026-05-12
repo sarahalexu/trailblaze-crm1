@@ -21,10 +21,10 @@ export async function GET() {
   ])
 
   const orgs = orgsRes.data || []
-  const orgDetails = orgs.map(org => ({
+  const orgDetails = (orgs as any[]).map((org: any) => ({
     ...org,
-    user_count: (usersRes.data || []).filter(u => u.org_id === org.id).length,
-    account_count: (accountsRes.data || []).filter(a => a.org_id === org.id).length,
+    user_count: (usersRes.data || []).filter((u: any) => u.org_id === org.id).length,
+    account_count: (accountsRes.data || []).filter((a: any) => a.org_id === org.id).length,
   }))
 
   const plans = ['beta', 'starter', 'growth', 'scale', 'enterprise'].map(tier => ({
