@@ -1,60 +1,52 @@
-// src/middleware.ts
-// Protects CRM routes — redirects unauthenticated users to login
+import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { NextResponse, type NextRequest } from 'next/server'
-
-export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request: { headers: request.headers },
-  })
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({ name, value, ...options })
-          response = NextResponse.next({ request: { headers: request.headers } })
-          response.cookies.set({ name, value, ...options })
-        },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value: '', ...options })
-          response = NextResponse.next({ request: { headers: request.headers } })
-          response.cookies.set({ name, value: '', ...options })
-        },
-      },
-    }
-  )
-
-  const { data: { user } } = await supabase.auth.getUser()
-
-  // Public routes that don't require auth
-  const publicRoutes = ['/login', '/signup', '/forgot-password', '/auth/callback', '/landing', '/legal']
-  const isPublicRoute = publicRoutes.some(route => request.nextUrl.pathname.startsWith(route))
-
-  if (!user && !isPublicRoute) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    url.searchParams.set('redirect', request.nextUrl.pathname)
-    return NextResponse.redirect(url)
+export async function middleware(req: NextRequest) {
+  const res = NextResponse.next()
+  const supabase = createMiddlewareClient({ req, res })
+  
+  // Refresh the session - this is critical for auth to work
+  const { data: { session } } = await supabase.auth.getSession()
+  
+  const path = req.nextUrl.pathname
+  
+  // These paths must NEVER be blocked
+  const publicPaths = [
+    '/login',
+    '/signup',
+    '/forgot-password',
+    '/auth/callback',
+    '/auth/confirm',
+    '/api/',
+    '/_next/',
+    '/favicon.ico',
+    '/sw.js',
+    '/offline.html',
+  ]
+  
+  // Allow all public paths through
+  if (publicPaths.some(p => path.startsWith(p)) || path === '/') {
+    return res
   }
-
-  if (user && isPublicRoute) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
-    return NextResponse.redirect(url)
+  
+  // If not logged in and trying to access protected route, redirect to login
+  if (!session) {
+    const redirectUrl = new URL('/login', req.url)
+    redirectUrl.searchParams.set('redirectTo', path)
+    return NextResponse.redirect(redirectUrl)
   }
-
-  return response
+  
+  // If logged in and trying to access login/signup, redirect to dashboard
+  if (session && (path === '/login' || path === '/signup')) {
+    return NextResponse.redirect(new URL('/dashboard', req.url))
+  }
+  
+  return res
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|sw.js|offline.html|.*\\.png|.*\\.jpg|.*\\.svg).*)',
   ],
 }
