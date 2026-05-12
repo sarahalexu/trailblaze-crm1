@@ -1,17 +1,23 @@
 // src/lib/supabase/admin.ts
-// Server-side admin client (bypasses RLS)
-// Lazy-initialized to avoid build-time errors
+// Admin client with service role key — bypasses RLS
+// Used in cron jobs, webhooks, and admin operations
+import { createClient } from '@supabase/supabase-js'
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+let adminClient: ReturnType<typeof createClient> | null = null
 
-let _client: SupabaseClient | null = null
+export function getAdminClient() {
+  if (adminClient) return adminClient
 
-export function getAdminClient(): SupabaseClient {
-  if (!_client) {
-    _client = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-  }
-  return _client
+  adminClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  )
+
+  return adminClient
 }
