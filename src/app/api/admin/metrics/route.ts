@@ -26,11 +26,11 @@ export async function GET() {
     user_count: (usersRes.data || []).filter((u: any) => u.org_id === org.id).length,
     account_count: (accountsRes.data || []).filter((a: any) => a.org_id === org.id).length,
   }))
-
-  const plans = ['beta', 'starter', 'growth', 'scale', 'enterprise'].map(tier => ({
+  const plans = ['beta', 'starter', 'growth', 'scale', 'enterprise'].map((tier) => ({
     plan_tier: tier,
-    count: orgs.filter(o => o.plan_tier === tier).length,
+    count: (orgs as any[]).filter((o: any) => o.plan_tier === tier).length,
   }))
+
 
   return NextResponse.json({
     metrics: {
