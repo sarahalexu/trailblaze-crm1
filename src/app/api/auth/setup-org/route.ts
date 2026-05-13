@@ -31,8 +31,9 @@ export async function POST(request: Request) {
       '-' +
       Math.random().toString(36).substring(2, 6)
 
-    const { data: org, error: orgError } = await supabaseAdmin
-      .from('organizations')
+    // CREATE ORGANIZATION
+    const { data: org, error: orgError } = await (supabaseAdmin
+      .from('organizations') as any)
       .insert([
         {
           name: org_name,
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
           industry,
           plan_tier: 'beta',
           subscription_status: 'beta',
-        } as any,
+        },
       ])
       .select()
       .single()
@@ -49,8 +50,9 @@ export async function POST(request: Request) {
       throw orgError
     }
 
-    const { error: userError } = await supabaseAdmin
-      .from('users')
+    // CREATE USER
+    const { error: userError } = await (supabaseAdmin
+      .from('users') as any)
       .insert([
         {
           org_id: org.id,
@@ -59,13 +61,14 @@ export async function POST(request: Request) {
           full_name,
           date_of_birth,
           role: 'admin',
-        } as any,
+        },
       ])
 
     if (userError) {
       throw userError
     }
 
+    // RUN SETUP FUNCTION
     const { error: setupError } = await supabaseAdmin.rpc(
       'setup_new_organization',
       {
@@ -86,7 +89,7 @@ export async function POST(request: Request) {
     console.error('Org setup error:', error)
 
     return NextResponse.json(
-      { error: error.message },
+      { error: error.message || 'Something went wrong' },
       { status: 500 }
     )
   }
