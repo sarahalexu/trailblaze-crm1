@@ -11,12 +11,33 @@ export async function POST(request: Request) {
     }
     const slug = org_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Math.random().toString(36).substring(2, 6)
 
-    const { data: org, error: orgError } = await supabaseAdmin.from('organizations').insert({ name: org_name, slug, industry, plan_tier: 'beta', subscription_status: 'beta' }).select().single()
-    if (orgError) throw orgError
-
-    const { error: userError } = await supabaseAdmin.from('users').insert({ org_id: org.id, auth_id, email, full_name, date_of_birth, role: 'admin' })
-    if (userError) throw userError
-
+    const { data: org, error: orgError } = await (supabaseAdmin
+      .from('organizations')
+      .insert([
+        {
+          name: org_name,
+          slug,
+          industry,
+          plan_tier: 'beta',
+          subscription_status: 'beta',
+        },
+      ])
+      .select()
+      .single() as any)
+    
+      const { error: userError } = await supabaseAdmin
+  .from('users')
+  .insert([
+    {
+      org_id: org.id,
+      auth_id,
+      email,
+      full_name,
+      date_of_birth,
+      role: 'admin',
+    },
+  ] as any)
+  
     const { error: setupError } = await supabaseAdmin.rpc('setup_new_organization', { p_org_id: org.id, p_plan_tier: 'beta' })
     if (setupError) throw setupError
 
