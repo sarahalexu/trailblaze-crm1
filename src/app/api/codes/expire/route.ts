@@ -70,13 +70,13 @@ export async function GET(request: Request) {
     // Mark the redemption as expired
     if (org.access_code_id) {
       await (supabaseAdmin
-        .from('code_redemptions')
+        .from('code_redemptions') as any)
         .update({
           is_expired: true,
           reverted_at: now,
         })
         .eq('org_id', org.id)
-        .eq('code_id', org.access_code_id) as any)
+        .eq('code_id', org.access_code_id)
     }
 
     // Create a notification for the org admin
