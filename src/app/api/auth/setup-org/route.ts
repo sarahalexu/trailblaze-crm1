@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     }
 
     // RUN SETUP FUNCTION
-    const { error: setupError } = await supabaseAdmin.rpc(
+    const { error: setupError } = await (supabaseAdmin as any).rpc(
       'setup_new_organization',
       {
         p_org_id: org.id,
