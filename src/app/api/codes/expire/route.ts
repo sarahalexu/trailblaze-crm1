@@ -88,17 +88,17 @@ export async function GET(request: Request) {
       .limit(1)
 
     if (adminUsers && adminUsers.length > 0) {
-      await (supabaseAdmin
-    .from('notifications') as any)
-    .insert([
-      {
-        user_id: adminUsers[0].id,
-        org_id: org.id,
-        type: 'system',
-        title: 'Your access plan has changed',
-        message: `Your ${org.plan_tier} access has expired. You've been moved to the ${revertTo} plan. Upgrade anytime from Settings → Billing to restore full access.`,
-      },
-    ]))
+    await (
+      (supabaseAdmin.from('notifications') as any).insert([
+        {
+          user_id: adminUsers[0].id,
+          org_id: org.id,
+          type: 'system',
+          title: 'Your access plan has changed',
+          message: `Your ${org.plan_tier} access has expired. You've been moved to the ${revertTo} plan. Upgrade anytime from Settings → Billing to restore full access.`,
+        },
+      ])
+    )
 
     downgraded++
   }
