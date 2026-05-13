@@ -58,14 +58,14 @@ export async function GET(request: Request) {
         : 'starter'
 
     await (supabaseAdmin
-      .from('organizations')
+      .from('organizations') as any)
       .update({
         plan_tier: revertTo,
         access_code_id: null,
         access_expires_at: null,
         previous_plan_tier: null,
       })
-      .eq('id', org.id) as any)
+      .eq('id', org.id)
 
     // Mark the redemption as expired
     if (org.access_code_id) {
