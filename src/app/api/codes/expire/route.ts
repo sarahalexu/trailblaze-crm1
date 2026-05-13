@@ -81,23 +81,24 @@ export async function GET(request: Request) {
 
     // Create a notification for the org admin
     const { data: adminUsers } = await (supabaseAdmin
-      .from('users')
+      .from('users') as any)
       .select('id')
       .eq('org_id', org.id)
       .eq('role', 'admin')
-      .limit(1) as any)
+      .limit(1)
 
     if (adminUsers && adminUsers.length > 0) {
       await (supabaseAdmin
-        .from('notifications')
-        .insert({
-          user_id: adminUsers[0].id,
-          org_id: org.id,
-          type: 'system',
-          title: 'Your access plan has changed',
-          message: `Your ${org.plan_tier} access has expired. You've been moved to the ${revertTo} plan. Upgrade anytime from Settings → Billing to restore full access.`,
-        }) as any)
-    }
+    .from('notifications') as any)
+    .insert([
+      {
+        user_id: adminUsers[0].id,
+        org_id: org.id,
+        type: 'system',
+        title: 'Your access plan has changed',
+        message: `Your ${org.plan_tier} access has expired. You've been moved to the ${revertTo} plan. Upgrade anytime from Settings → Billing to restore full access.`,
+      },
+    ]))
 
     downgraded++
   }
