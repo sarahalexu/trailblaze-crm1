@@ -284,7 +284,8 @@ export default function AccountDetailPage() {
         <span className="text-sm text-gray-500">Analyzing {account.name}...</span>
       </div>
     ) : (
-      <div className="text-sm text-gray-700 leading-relaxed prose prose-sm max-w-none"
+      <div className="text-sm text-gray-700 leading-relaxed max-w-none overflow-visible"
+  style={{ maxHeight: 'none', overflow: 'visible' }}
   dangerouslySetInnerHTML={{ __html: aiResult
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')

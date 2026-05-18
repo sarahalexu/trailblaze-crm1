@@ -221,7 +221,6 @@ export default function DashboardPage() {
       {m.total === 0 && (
         <DemoBanner onGenerate={() => loadDashboard()} />
       )}
-      <PlanBanner />
 
       {/* Metric cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

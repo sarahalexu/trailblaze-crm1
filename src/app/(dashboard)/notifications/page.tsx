@@ -51,6 +51,20 @@ export default function NotificationsPage() {
   const unreadCount = notifications.filter(n => !n.is_read).length
 
   return (
+    <div className="flex items-center justify-between mb-6">
+  <h1 className="text-xl font-semibold text-gray-900">Notifications</h1>
+  <button onClick={async () => {
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    if (!authUser) return
+    const { data: profile } = await supabase.from('users').select('org_id').eq('auth_id', authUser.id).single()
+    if (!profile) return
+    await supabase.from('notifications').update({ is_read: true, read_at: new Date().toISOString() }).eq('org_id', profile.org_id).eq('is_read', false)
+    loadNotifications()
+  }} className="px-3 py-1.5 text-xs text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-50">
+    Mark all read
+  </button>
+</div>
+
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
         <div>

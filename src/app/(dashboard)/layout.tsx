@@ -46,6 +46,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname()
   const supabase = createClient()
 
+  const pathname = usePathname() // add this import from 'next/navigation' if not already there
+
+useEffect(() => {
+  loadNotifCount()
+}, [pathname]) // add pathname here so it re-checks when you navigate
+
   // Dark mode toggle
   useEffect(() => {
     const saved = localStorage.getItem('tb_dark_mode')
@@ -128,7 +134,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="hidden sm:block">
               <span className="text-sm font-medium text-gray-900">TrailBlaze CRM</span>
               <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium"
-                style={{ background: '#c9a54e', color: '#2b0548' }}>BETA</span>
             </div>
           </Link>
         </div>
