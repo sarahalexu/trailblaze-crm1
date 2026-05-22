@@ -12,6 +12,57 @@ import GuidedTooltips from '@/components/ui/GuidedTooltips'
 import ProductTour from '@/components/ui/ProductTour'
 import Icons from '@/components/ui/Icons'
 
+// Simple inline icons for new nav items that may not exist in Icons component
+function AnalyticsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 20V10M12 20V4M6 20v-6" />
+    </svg>
+  )
+}
+
+function BroadcastIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19.07 4.93A10 10 0 0 0 4.93 19.07M15.54 8.46A5 5 0 0 0 8.46 15.54" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" />
+    </svg>
+  )
+}
+
+function KeyIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+    </svg>
+  )
+}
+
+function ShieldIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+  )
+}
+
+function PaletteIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="13.5" cy="6.5" r="0.5" fill="currentColor" /><circle cx="17.5" cy="10.5" r="0.5" fill="currentColor" /><circle cx="8.5" cy="7.5" r="0.5" fill="currentColor" /><circle cx="6.5" cy="12" r="0.5" fill="currentColor" />
+      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
+    </svg>
+  )
+}
+
+function PipelineIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  )
+}
+
 const allNavItems = [
   {
     label: 'Overview',
@@ -30,11 +81,13 @@ const allNavItems = [
       { name: 'Sequences', href: '/sequences', icon: Icons.sequences },
       { name: 'Playbooks', href: '/playbooks', icon: Icons.playbooks },
       { name: 'Snippets', href: '/snippets', icon: Icons.snippets },
+      { name: 'Broadcasts', href: '/broadcasts', icon: BroadcastIcon },
     ],
   },
   {
     label: 'Insights',
     items: [
+      { name: 'Analytics', href: '/analytics', icon: AnalyticsIcon },
       { name: 'Reports', href: '/reports', icon: Icons.reports },
       { name: 'Revenue at risk', href: '/reports/revenue-at-risk', icon: Icons.risk },
     ],
@@ -58,6 +111,7 @@ export default function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [notifCount, setNotifCount] = useState(0)
   const [darkMode, setDarkMode] = useState(false)
+  const [customPipelines, setCustomPipelines] = useState<{ id: string; name: string }[]>([])
 
   const router = useRouter()
   const pathname = usePathname()
@@ -75,6 +129,21 @@ export default function DashboardLayout({
       setDarkMode(true)
       document.documentElement.classList.add('dark')
     }
+  }, [])
+
+  // Load custom pipelines
+  useEffect(() => {
+    async function loadCustomPipelines() {
+      const { data } = await supabase
+        .from('pipelines')
+        .select('id, name')
+        .eq('is_custom', true)
+        .order('name')
+
+      setCustomPipelines(data || [])
+    }
+
+    loadCustomPipelines()
   }, [])
 
   async function loadUser() {
@@ -182,10 +251,6 @@ export default function DashboardLayout({
               <span className="text-sm font-medium text-gray-900">
                 TrailBlaze CRM
               </span>
-
-              <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-100 text-purple-700">
-                Beta
-              </span>
             </div>
           </Link>
         </div>
@@ -284,6 +349,51 @@ export default function DashboardLayout({
                     </Link>
                   )
                 })}
+
+                {/* Custom pipelines - show after Sales pipeline in Overview section */}
+                {section.label === 'Overview' && customPipelines.length > 0 && (
+                  <>
+                    {customPipelines.map(cp => {
+                      const cpHref = `/pipeline/custom/${cp.id}`
+                      const isActive = pathname === cpHref || pathname.startsWith(cpHref + '/')
+
+                      return (
+                        <Link
+                          key={cp.id}
+                          href={cpHref}
+                          className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] transition-colors ${
+                            isActive
+                              ? 'bg-purple-50 text-purple-900 font-medium'
+                              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                          }`}
+                          onClick={() => {
+                            if (window.innerWidth < 1024) {
+                              setSidebarOpen(false)
+                            }
+                          }}
+                        >
+                          <span className="opacity-50">
+                            <PipelineIcon className="w-[18px] h-[18px]" />
+                          </span>
+                          {cp.name}
+                        </Link>
+                      )
+                    })}
+
+                    <Link
+                      href="/pipeline/create"
+                      className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[12px] text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition-colors"
+                      onClick={() => {
+                        if (window.innerWidth < 1024) {
+                          setSidebarOpen(false)
+                        }
+                      }}
+                    >
+                      <span className="text-[16px] leading-none">+</span>
+                      New pipeline
+                    </Link>
+                  </>
+                )}
               </div>
             ))}
           </nav>

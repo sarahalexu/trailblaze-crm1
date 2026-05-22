@@ -175,9 +175,9 @@ export default function AccountDetailPage() {
   }
 
   function formatNaira(amount?: number): string {
-    if (!amount) return '—'
-    if (amount >= 1000000) return '₦' + (amount / 1000000).toFixed(1) + 'M'
-    return '₦' + amount.toLocaleString()
+    if (!amount) return '\u2014'
+    if (amount >= 1000000) return '\u20A6' + (amount / 1000000).toFixed(1) + 'M'
+    return '\u20A6' + amount.toLocaleString()
   }
 
   async function runAI(action: string) {
@@ -193,8 +193,23 @@ export default function AccountDetailPage() {
     } catch { setAiResult('Failed to connect to AI service.') }
     setAiLoading(false)
   }
-  function formatDate(d?: string): string { return d ? new Date(d).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) : '—' }
-  const channelIcons: Record<string, string> = { whatsapp: '💬', email: '📧', call: '📞', meeting: '🤝', sms: '📱', in_person: '👤', other: '📝' }
+
+  function formatDate(d?: string): string { return d ? new Date(d).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) : '\u2014' }
+
+  function formatAIText(text: string): React.ReactNode {
+    const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/)
+    return parts.map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={i} className="font-semibold text-gray-900">{part.slice(2, -2)}</strong>
+      }
+      if (part.startsWith('*') && part.endsWith('*')) {
+        return <em key={i}>{part.slice(1, -1)}</em>
+      }
+      return part
+    })
+  }
+
+  const channelIcons: Record<string, string> = { whatsapp: '\uD83D\uDCAC', email: '\uD83D\uDCE7', call: '\uD83D\uDCDE', meeting: '\uD83E\uDD1D', sms: '\uD83D\uDCF1', in_person: '\uD83D\uDC64', other: '\uD83D\uDCDD' }
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin"></div></div>
   if (!account) return <div className="text-center py-16 text-gray-500">Account not found.</div>
@@ -265,47 +280,55 @@ export default function AccountDetailPage() {
         )}
       </div>
 
-      {/* AI Result Panel */}
+      {/* AI Result Panel - FIXED */}
       {showAiPanel && (
-  <div className="bg-white border border-purple-200 rounded-xl p-5 mb-6">
-    <div className="flex items-center justify-between mb-3">
-      <div className="flex items-center gap-2">
-        <span className="text-sm">🤖</span>
-        <h3 className="text-sm font-medium text-gray-900">
-          {aiAction === 'risk_analysis' ? 'Risk Analysis' : aiAction === 'draft_message' ? 'Draft Message' : 'Suggested Next Action'}
-        </h3>
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">AI-powered</span>
-      </div>
-      <button onClick={() => setShowAiPanel(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
-    </div>
-    {aiLoading ? (
-      <div className="flex items-center gap-3 py-4">
-        <div className="w-5 h-5 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin"></div>
-        <span className="text-sm text-gray-500">Analyzing {account.name}...</span>
-      </div>
-    ) : (
-      <div className="text-sm text-gray-700 leading-relaxed max-w-none overflow-visible"
-  style={{ maxHeight: 'none', overflow: 'visible' }}
-  dangerouslySetInnerHTML={{ __html: aiResult
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/^### (.+)$/gm, '<h4 class="font-semibold text-gray-900 mt-3 mb-1">$1</h4>')
-    .replace(/^## (.+)$/gm, '<h3 class="font-semibold text-gray-900 mt-4 mb-1">$1</h3>')
-    .replace(/^# (.+)$/gm, '<h2 class="font-semibold text-gray-900 mt-4 mb-2">$1</h2>')
-    .replace(/^- (.+)$/gm, '<div class="flex gap-2 ml-2"><span class="text-purple-500">•</span><span>$1</span></div>')
-    .replace(/^\d+\. (.+)$/gm, '<div class="flex gap-2 ml-2"><span class="text-purple-500 font-medium">$&</span></div>')
-    .replace(/\n\n/g, '<br/><br/>')
-    .replace(/\n/g, '<br/>')
-  }}
-/>
-    )}
-    {!aiLoading && aiAction === 'draft_message' && aiResult && (
-      <button onClick={() => navigator.clipboard.writeText(aiResult)} className="mt-3 px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
-        Copy message
-      </button>
-    )}
-  </div>
-)}
+        <div className="bg-white border border-purple-200 rounded-xl mb-6 overflow-hidden">
+          <div className="flex items-center justify-between px-5 pt-4 pb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm">🤖</span>
+              <h3 className="text-sm font-medium text-gray-900">
+                {aiAction === 'risk_analysis' ? 'Risk Analysis' : aiAction === 'draft_message' ? 'Draft Message' : 'Suggested Next Action'}
+              </h3>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">AI</span>
+            </div>
+            <button onClick={() => setShowAiPanel(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
+          </div>
+          <div className="px-5 pb-5">
+            {aiLoading ? (
+              <div className="flex items-center gap-3 py-4">
+                <div className="w-5 h-5 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin"></div>
+                <span className="text-sm text-gray-500">Analyzing {account.name}...</span>
+              </div>
+            ) : (
+              <>
+                <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
+                  {aiResult.split('\n').map((line, idx) => {
+                    const trimmed = line.trim()
+                    if (!trimmed) return <br key={idx} />
+                    if (trimmed.startsWith('### ')) return <h4 key={idx} className="font-semibold text-gray-900 mt-3 mb-1 text-sm">{trimmed.slice(4)}</h4>
+                    if (trimmed.startsWith('## ')) return <h3 key={idx} className="font-semibold text-gray-900 mt-3 mb-1 text-sm">{trimmed.slice(3)}</h3>
+                    if (trimmed.startsWith('# ')) return <h2 key={idx} className="font-semibold text-gray-900 mt-4 mb-2">{trimmed.slice(2)}</h2>
+                    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+                      return <div key={idx} className="flex gap-2 ml-1 my-0.5"><span className="text-purple-500 flex-shrink-0">{'\u2022'}</span><span>{formatAIText(trimmed.slice(2))}</span></div>
+                    }
+                    const numMatch = trimmed.match(/^(\d+)\.\s(.+)/)
+                    if (numMatch) {
+                      return <div key={idx} className="flex gap-2 ml-1 my-0.5"><span className="text-purple-500 font-medium flex-shrink-0">{numMatch[1]}.</span><span>{formatAIText(numMatch[2])}</span></div>
+                    }
+                    return <p key={idx} className="my-0.5">{formatAIText(trimmed)}</p>
+                  })}
+                </div>
+                {aiAction === 'draft_message' && aiResult && (
+                  <button onClick={() => navigator.clipboard.writeText(aiResult)} className="mt-3 px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
+                    Copy message
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex gap-0 border-b border-gray-200 mb-5 overflow-x-auto">
         {([{ key: 'timeline' as TabKey, label: `Timeline (${interactions.length})` }, { key: 'contacts' as TabKey, label: `Contacts (${contacts.length})` }, { key: 'playbooks' as TabKey, label: `Playbooks (${assignments.filter(a => a.status === 'in_progress').length})` }, { key: 'health' as TabKey, label: 'Health history' }]).map(tab => (
@@ -330,7 +353,7 @@ export default function AccountDetailPage() {
 
             return (
             <div key={i.id} className="bg-white border border-gray-200 rounded-lg p-4 flex gap-3">
-              <div className="text-lg">{channelIcons[i.channel] || '📝'}</div>
+              <div className="text-lg">{channelIcons[i.channel] || '\uD83D\uDCDD'}</div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className="text-sm font-medium text-gray-900">{i.subject || i.channel}</span>
@@ -428,7 +451,7 @@ export default function AccountDetailPage() {
                       <button onClick={() => updateStepProgress(p.id, p.status === 'completed' ? 'pending' : 'completed')}
                         className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${p.status === 'completed' ? 'border-green-500 bg-green-500 text-white' : p.status === 'skipped' ? 'border-gray-300 bg-gray-100' : 'border-gray-300 hover:border-purple-400'}`}>
                         {p.status === 'completed' && <span className="text-xs">✓</span>}
-                        {p.status === 'skipped' && <span className="text-xs text-gray-400">—</span>}
+                        {p.status === 'skipped' && <span className="text-xs text-gray-400">{'\u2014'}</span>}
                       </button>
                       <div className="flex-1">
                         <div className={`text-sm ${p.status === 'completed' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{p.step?.title || 'Step'}</div>
@@ -471,7 +494,7 @@ export default function AccountDetailPage() {
                       <td className="py-3 px-4" style={{ color: '#c9a54e' }}>{h.score_exceed}</td>
                       <td className="py-3 px-4" style={{ color: '#1D9E75' }}>{h.score_prevent}</td>
                       <td className="py-3 px-4 font-medium">{h.score_total}/20</td>
-                      <td className="py-3 px-4 text-gray-500 hidden md:table-cell">{h.scored_by?.full_name || '—'}</td>
+                      <td className="py-3 px-4 text-gray-500 hidden md:table-cell">{h.scored_by?.full_name || '\u2014'}</td>
                     </tr>
                   ))}
                 </tbody>
