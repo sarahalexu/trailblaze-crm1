@@ -4,7 +4,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/lib/supabase/client'
 
 interface MetricCard {
   label: string;
@@ -14,7 +14,7 @@ interface MetricCard {
 }
 
 export default function AnalyticsPage() {
-  const supabase = createClientComponentClient();
+  const supabase = createClient()
 
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');

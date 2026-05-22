@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/lib/supabase/client'
 
 interface Contact {
   id: string;
@@ -19,7 +19,7 @@ interface Contact {
 
 export default function NewBroadcastPage() {
   const router = useRouter();
-  const supabase = createClientComponentClient();
+  const supabase = createClient()
 
   const [name, setName] = useState('');
   const [messageType, setMessageType] = useState<'template' | 'text'>('template');

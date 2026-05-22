@@ -5,11 +5,11 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/lib/supabase/client'
 
 export default function BroadcastsPage() {
   const router = useRouter();
-  const supabase = createClientComponentClient();
+  const supabase = createClient()
 
   const [broadcasts, setBroadcasts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

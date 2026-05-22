@@ -4,7 +4,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/lib/supabase/client'
 
 interface ApiKey {
   id: string;
@@ -19,7 +19,7 @@ interface ApiKey {
 }
 
 export default function ApiKeysPage() {
-  const supabase = createClientComponentClient();
+  const supabase = createClient()
 
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);

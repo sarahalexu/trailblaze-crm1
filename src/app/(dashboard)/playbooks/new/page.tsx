@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/lib/supabase/client'
 
 interface PlaybookStep {
   id: string;
@@ -41,7 +41,7 @@ const CATEGORIES = [
 
 export default function NewPlaybookPage() {
   const router = useRouter();
-  const supabase = createClientComponentClient();
+  const supabase = createClient()
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
