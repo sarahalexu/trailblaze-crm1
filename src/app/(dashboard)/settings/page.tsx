@@ -1,3 +1,6 @@
+// src/app/(dashboard)/settings/page.tsx
+// Updated: Added Integrations tab that links to the integrations hub
+
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -101,6 +104,7 @@ export default function SettingsPage() {
   const tabs = [
     { id: 'profile', label: 'Profile' },
     { id: 'team', label: 'Team' },
+    { id: 'integrations', label: 'Integrations' },
     { id: 'billing', label: 'Billing' },
     { id: 'data', label: 'Data' },
     { id: 'security', label: 'Security' },
@@ -115,7 +119,11 @@ export default function SettingsPage() {
       {/* Tabs */}
       <div className="flex gap-0 border-b border-gray-200 mb-6 overflow-x-auto">
         {tabs.map(t => (
-          <button key={t.id} onClick={() => t.id === 'billing' ? router.push('/settings/billing') : setTab(t.id)}
+          <button key={t.id} onClick={() => {
+            if (t.id === 'billing') router.push('/settings/billing')
+            else if (t.id === 'integrations') router.push('/settings/integrations')
+            else setTab(t.id)
+          }}
             className={`px-4 py-2.5 text-sm whitespace-nowrap border-b-2 transition-colors ${tab === t.id ? 'border-purple-700 text-purple-700 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{t.label}</button>
         ))}
       </div>
@@ -157,6 +165,33 @@ export default function SettingsPage() {
             <h3 className="text-sm font-medium text-gray-900 mb-2">Organization</h3>
             <p className="text-sm text-gray-600">{org?.name}</p>
             <p className="text-xs text-gray-400 mt-1">Plan: <span className="capitalize font-medium" style={{ color: '#5a1890' }}>{org?.plan_tier}</span>{org?.access_expires_at && ` · Expires ${new Date(org.access_expires_at).toLocaleDateString('en-NG')}`}</p>
+          </div>
+
+          {/* Quick links to integrations */}
+          <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <h3 className="text-sm font-medium text-gray-900 mb-3">Quick setup</h3>
+            <div className="space-y-2">
+              <Link href="/settings/integrations" className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 border border-gray-100 transition-colors">
+                <div className="flex items-center gap-3">
+                  <span className="text-lg">🔗</span>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Connect Gmail & WhatsApp</p>
+                    <p className="text-xs text-gray-500">Sync emails and messages automatically</p>
+                  </div>
+                </div>
+                <span className="text-xs text-purple-600">Set up →</span>
+              </Link>
+              <Link href="/settings/billing" className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 border border-gray-100 transition-colors">
+                <div className="flex items-center gap-3">
+                  <span className="text-lg">💳</span>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Upgrade your plan</p>
+                    <p className="text-xs text-gray-500">Unlock broadcasts, analytics, and more</p>
+                  </div>
+                </div>
+                <span className="text-xs text-purple-600">View plans →</span>
+              </Link>
+            </div>
           </div>
 
           <button onClick={handleLogout} className="w-full py-2.5 border border-red-200 text-red-600 rounded-lg text-sm hover:bg-red-50">Sign out</button>
@@ -224,7 +259,7 @@ export default function SettingsPage() {
           <div className="bg-red-50 border border-red-200 rounded-xl p-5">
             <h3 className="text-sm font-medium text-red-900 mb-2">Danger zone</h3>
             <p className="text-xs text-red-600 mb-4">Permanently delete your account and all data. This cannot be undone.</p>
-            <button onClick={() => alert('Contact sarah@trailblazeafrica.com to delete your account.')} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">Delete account</button>
+            <button onClick={() => alert('Contact support@trailblazeafrica.com to delete your account.')} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">Delete account</button>
           </div>
         </div>
       )}
@@ -244,7 +279,7 @@ export default function SettingsPage() {
 
           <div className="bg-white border border-gray-200 rounded-xl p-5">
             <h3 className="text-sm font-medium text-gray-900 mb-2">Session security</h3>
-            <p className="text-xs text-gray-500">You'll be automatically logged out after 24 hours of inactivity to protect your account.</p>
+            <p className="text-xs text-gray-500">You will be automatically logged out after 24 hours of inactivity to protect your account.</p>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-xl p-5">
