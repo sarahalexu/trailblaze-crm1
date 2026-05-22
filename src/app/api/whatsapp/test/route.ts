@@ -2,12 +2,12 @@
 // Tests WhatsApp credentials before saving them
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { testConnection } from '@/lib/whatsapp';
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient();
+    const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {

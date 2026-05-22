@@ -5,11 +5,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/lib/supabase/client'
 
 export default function WhatsAppSettingsPage() {
-  const supabase = createClientComponentClient();
-
+  const supabase = createClient()
+  
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);

@@ -2,7 +2,7 @@
 // Fetches and caches approved WhatsApp message templates from Meta
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { getOrgWhatsAppConfig, fetchTemplatesFromMeta } from '@/lib/whatsapp';
 
@@ -13,7 +13,7 @@ const supabaseAdmin = createAdminClient(
 
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createClient();
+    const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
