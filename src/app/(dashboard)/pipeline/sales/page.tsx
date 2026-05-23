@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Deal, PipelineStage } from '@/lib/types'
 import Link from 'next/link'
 import { DealTableView, ViewToggle } from '@/components/ui/PipelineTableView'
+import PipelineHeader from '@/components/pipeline/PipelineHeader'
 
 export default function SalesPipelinePage() {
   const [stages, setStages] = useState<(PipelineStage & { deals: Deal[] })[]>(
@@ -226,9 +227,7 @@ export default function SalesPipelinePage() {
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-xl font-medium text-gray-900">
-            Sales pipeline
-          </h1>
+        <PipelineHeader title="Sales Pipeline" />
 
           <p className="text-sm text-gray-500 mt-0.5">
             Track deals from lead to close. Won deals automatically create

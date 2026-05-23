@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Account, Pipeline, PipelineStage } from '@/lib/types'
 import Link from 'next/link'
 import { AccountTableView, ViewToggle } from '@/components/ui/PipelineTableView'
+import PipelineHeader from '@/components/pipeline/PipelineHeader'
 
 export default function RetentionPipelinePage() {
   const [pipeline, setPipeline] = useState<Pipeline | null>(null)
@@ -137,9 +138,8 @@ export default function RetentionPipelinePage() {
     <div>
       <div>
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-medium text-gray-900">
-            Retention pipeline
-          </h1>
+        <PipelineHeader title="Retention Pipeline" />
+          
 
           <ViewToggle view={view} onToggle={setView} />
         </div>

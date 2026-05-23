@@ -1,16 +1,22 @@
 // src/app/(dashboard)/playbooks/page.tsx
+// Updated: Added "Create custom playbook" button with Scale plan paywall
+
 'use client'
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 import type { Playbook, PlaybookStep, PlaybookAssignment } from '@/lib/types'
+import { usePlanLimits } from '@/hooks/usePlanLimits'
 
 export default function PlaybooksPage() {
   const [playbooks, setPlaybooks] = useState<(Playbook & { steps: PlaybookStep[] })[]>([])
   const [activeAssignments, setActiveAssignments] = useState<any[]>([])
   const [selectedPlaybook, setSelectedPlaybook] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const { check, UpgradeModal } = usePlanLimits()
   const supabase = createClient()
+  const router = useRouter()
 
   useEffect(() => { loadPlaybooks() }, [])
 
@@ -22,7 +28,6 @@ export default function PlaybooksPage() {
       .from('users').select('org_id').eq('auth_id', user.id).single()
     if (!profile) return
 
-    // Get all available playbooks (system + org)
     const { data: playbooksData } = await supabase
       .from('playbooks')
       .select('*, steps:playbook_steps(*)')
@@ -35,7 +40,6 @@ export default function PlaybooksPage() {
       steps: (p.steps || []).sort((a: any, b: any) => a.step_number - b.step_number),
     })))
 
-    // Get active assignments
     const { data: assignments } = await supabase
       .from('playbook_assignments')
       .select(`
@@ -52,39 +56,45 @@ export default function PlaybooksPage() {
     setLoading(false)
   }
 
+  function handleCreatePlaybook() {
+    if (!check('custom_playbook')) return
+    router.push('/playbooks/new')
+  }
+
   const categoryLabels: Record<string, string> = {
-    onboarding: 'Onboarding',
-    review: 'Business review',
-    recovery: 'Recovery',
-    expansion: 'Expansion',
-    renewal: 'Renewal',
-    custom: 'Custom',
+    onboarding: 'Onboarding', review: 'Business review', recovery: 'Recovery',
+    expansion: 'Expansion', renewal: 'Renewal', custom: 'Custom',
   }
 
   const categoryColors: Record<string, string> = {
-    onboarding: '#85B7EB',
-    review: '#AFA9EC',
-    recovery: '#F0997B',
-    expansion: '#97C459',
-    renewal: '#FAC775',
-    custom: '#7e7e7e',
+    onboarding: '#85B7EB', review: '#AFA9EC', recovery: '#F0997B',
+    expansion: '#97C459', renewal: '#FAC775', custom: '#7e7e7e',
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin"></div>
-      </div>
-    )
+    return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin"></div></div>
   }
+
+  const customPlaybooks = playbooks.filter(p => p.is_custom)
+  const systemPlaybooks = playbooks.filter(p => !p.is_custom)
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-medium text-gray-900">Playbooks</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Guided workflows for every stage of the account lifecycle. Activate a playbook on any account.
-        </p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-xl font-medium text-gray-900">Playbooks</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Guided workflows for every stage of the account lifecycle. Activate a playbook on any account.
+          </p>
+        </div>
+        <button
+          onClick={handleCreatePlaybook}
+          className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
+          style={{ background: '#2b0548', color: '#e1b3ee' }}
+        >
+          + Create playbook
+          <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/20 font-medium">Scale</span>
+        </button>
       </div>
 
       {/* Active playbook assignments */}
@@ -104,25 +114,14 @@ export default function PlaybooksPage() {
                       <div className="text-sm font-medium text-gray-900">{assignment.playbook?.name}</div>
                       <div className="text-xs text-gray-500">{assignment.account?.name}</div>
                     </div>
-                    <span className="px-2 py-0.5 rounded text-xs font-medium"
-                      style={{ background: categoryColors[assignment.playbook?.category] + '20', color: categoryColors[assignment.playbook?.category] }}>
-                      {categoryLabels[assignment.playbook?.category] || 'Custom'}
-                    </span>
+                    <span className="text-sm font-medium" style={{ color: '#5a1890' }}>{progressPct}%</span>
                   </div>
 
-                  {/* Progress bar */}
-                  <div className="mb-2">
-                    <div className="flex justify-between text-xs text-gray-400 mb-1">
-                      <span>{completedSteps}/{totalSteps} steps</span>
-                      <span>{progressPct}%</span>
-                    </div>
-                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-500"
-                        style={{ width: `${progressPct}%`, background: '#5a1890' }} />
-                    </div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-2">
+                    <div className="h-full rounded-full transition-all duration-500"
+                      style={{ width: `${progressPct}%`, background: '#5a1890' }} />
                   </div>
 
-                  {/* Next step */}
                   {(() => {
                     const nextStep = (assignment.progress || [])
                       .sort((a: any, b: any) => (a.step?.step_number || 0) - (b.step?.step_number || 0))
@@ -143,10 +142,45 @@ export default function PlaybooksPage() {
         </div>
       )}
 
+      {/* Custom playbooks */}
+      {customPlaybooks.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-sm font-medium text-gray-900 mb-3">Your custom playbooks ({customPlaybooks.length})</h2>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {customPlaybooks.map(playbook => (
+              <div key={playbook.id}
+                className="bg-white border border-purple-200 rounded-xl p-5 hover:border-purple-300 transition-colors cursor-pointer"
+                onClick={() => setSelectedPlaybook(selectedPlaybook === playbook.id ? null : playbook.id)}>
+                <div className="flex items-start justify-between mb-3">
+                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">Custom</span>
+                </div>
+                <h3 className="text-sm font-medium text-gray-900 mb-1">{playbook.name}</h3>
+                <p className="text-xs text-gray-500 mb-3">{playbook.description}</p>
+                <div className="text-xs text-gray-400">{playbook.steps?.length || 0} steps</div>
+
+                {selectedPlaybook === playbook.id && (
+                  <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
+                    {playbook.steps?.map((step, i) => (
+                      <div key={step.id} className="flex gap-3">
+                        <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center text-xs font-medium text-purple-700 flex-shrink-0">{i + 1}</div>
+                        <div>
+                          <div className="text-xs font-medium text-gray-900">{step.title}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">{step.description}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Playbook library */}
       <h2 className="text-sm font-medium text-gray-900 mb-3">Playbook library</h2>
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {playbooks.map(playbook => (
+        {systemPlaybooks.map(playbook => (
           <div key={playbook.id}
             className="bg-white border border-gray-200 rounded-xl p-5 hover:border-gray-300 transition-colors cursor-pointer"
             onClick={() => setSelectedPlaybook(selectedPlaybook === playbook.id ? null : playbook.id)}>
@@ -165,24 +199,17 @@ export default function PlaybooksPage() {
             <p className="text-xs text-gray-500 mb-3">{playbook.description}</p>
             <div className="text-xs text-gray-400">{playbook.steps?.length || 0} steps</div>
 
-            {/* Expanded steps */}
             {selectedPlaybook === playbook.id && (
               <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
                 {playbook.steps?.map((step, i) => (
                   <div key={step.id} className="flex gap-3">
-                    <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs font-medium text-gray-500 flex-shrink-0">
-                      {i + 1}
-                    </div>
+                    <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs font-medium text-gray-500 flex-shrink-0">{i + 1}</div>
                     <div>
                       <div className="text-xs font-medium text-gray-900">{step.title}</div>
                       <div className="text-xs text-gray-500 mt-0.5">{step.description}</div>
                       {step.suggested_timeline_days != null && (
                         <div className="text-[10px] text-gray-400 mt-1">
-                          {step.suggested_timeline_days > 0
-                            ? `By day ${step.suggested_timeline_days}`
-                            : step.suggested_timeline_days < 0
-                            ? `${Math.abs(step.suggested_timeline_days)} days before`
-                            : 'On the day'}
+                          {step.suggested_timeline_days > 0 ? `By day ${step.suggested_timeline_days}` : step.suggested_timeline_days < 0 ? `${Math.abs(step.suggested_timeline_days)} days before` : 'On the day'}
                         </div>
                       )}
                     </div>
@@ -193,6 +220,8 @@ export default function PlaybooksPage() {
           </div>
         ))}
       </div>
+
+      <UpgradeModal />
     </div>
   )
 }
