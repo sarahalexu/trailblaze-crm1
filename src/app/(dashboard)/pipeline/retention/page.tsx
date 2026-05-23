@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Account, Pipeline, PipelineStage } from '@/lib/types'
 import Link from 'next/link'
 import { AccountTableView, ViewToggle } from '@/components/ui/PipelineTableView'
-import PipelineHeader from '@/components/pipeline/PipelineHeader'
+import PipelineHeader from '@/components/ui/PipelineHeader'
 
 export default function RetentionPipelinePage() {
   const [pipeline, setPipeline] = useState<Pipeline | null>(null)

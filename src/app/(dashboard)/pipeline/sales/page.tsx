@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Deal, PipelineStage } from '@/lib/types'
 import Link from 'next/link'
 import { DealTableView, ViewToggle } from '@/components/ui/PipelineTableView'
-import PipelineHeader from '@/components/pipeline/PipelineHeader'
+import PipelineHeader from '@/components/ui/PipelineHeader'
 
 export default function SalesPipelinePage() {
   const [stages, setStages] = useState<(PipelineStage & { deals: Deal[] })[]>(
