@@ -67,8 +67,11 @@ export default function ContactsPage() {
               </tr>
             </thead>
             <tbody>
+              
               {filtered.map(contact => (
-                <tr key={contact.id} className="border-b border-gray-100 hover:bg-gray-50">
+                <tr key={contact.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer">
+                  onClick={() => router.push(`/contacts/${contact.id}`)}
+
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium" style={{ background: '#2b054815', color: '#5a1890' }}>

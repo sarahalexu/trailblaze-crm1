@@ -13,6 +13,9 @@ import { getVisibleNavItems } from '@/lib/rbac'
 import GuidedTooltips from '@/components/ui/GuidedTooltips'
 import ProductTour from '@/components/ui/ProductTour'
 import Icons from '@/components/ui/Icons'
+import NotificationDropdown from '@/components/ui/NotificationDropdown'
+import GlobalSearch from '@/components/ui/GlobalSearch'
+
 
 // Inline icons for new nav items
 function AnalyticsIcon({ className }: { className?: string }) {
@@ -24,12 +27,16 @@ function BroadcastIcon({ className }: { className?: string }) {
 function PipelineIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
 }
+function TaskIcon({ className }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" /></svg>
+}
 
 const allNavItems = [
   {
     label: 'Overview',
     items: [
       { name: 'Dashboard', href: '/dashboard', icon: Icons.dashboard },
+      { name: 'Tasks', href: '/tasks', icon: TaskIcon },
       { name: 'Retention pipeline', href: '/pipeline/retention', icon: Icons.retention },
       { name: 'Sales pipeline', href: '/pipeline/sales', icon: Icons.sales },
     ],
@@ -135,16 +142,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         <div className="hidden md:block flex-1 max-w-md mx-8">
-          <input type="text" placeholder="Search accounts, contacts, interactions..." className="w-full px-3.5 py-2 bg-gray-100 border-0 rounded-lg text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white" />
-        </div>
+  <GlobalSearch />
+</div>
 
         <div className="flex items-center gap-3">
-          <Link href="/notifications" className="relative p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
-            <Icons.bell className="w-5 h-5 text-gray-500 hover:text-gray-700 transition-colors cursor-pointer" />
-            {notifCount > 0 && (
-              <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-medium rounded-full flex items-center justify-center">{notifCount > 9 ? '9+' : notifCount}</span>
-            )}
-          </Link>
+        <NotificationDropdown />
+
           <Link href="/settings" className="flex items-center gap-2.5 cursor-pointer group">
             <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium" style={{ background: '#2b0548', color: '#e1b3ee' }}>{initials}</div>
             <div className="hidden lg:block">

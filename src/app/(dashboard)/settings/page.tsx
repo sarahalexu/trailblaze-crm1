@@ -170,6 +170,16 @@ export default function SettingsPage() {
           {/* Quick links to integrations */}
           <div className="bg-white border border-gray-200 rounded-xl p-5">
             <h3 className="text-sm font-medium text-gray-900 mb-3">Quick setup</h3>
+            <Link href="/settings/import" className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 border border-gray-100">
+  <div className="flex items-center gap-3">
+    <span className="text-lg">📥</span>
+    <div>
+      <p className="text-sm font-medium text-gray-900">Import data</p>
+      <p className="text-xs text-gray-500">Upload CSV files to import accounts and contacts</p>
+    </div>
+  </div>
+  <span className="text-xs text-purple-600">Import →</span>
+</Link>
             <div className="space-y-2">
               <Link href="/settings/integrations" className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 border border-gray-100 transition-colors">
                 <div className="flex items-center gap-3">

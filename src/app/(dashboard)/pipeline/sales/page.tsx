@@ -6,8 +6,11 @@ import type { Deal, PipelineStage } from '@/lib/types'
 import Link from 'next/link'
 import { DealTableView, ViewToggle } from '@/components/ui/PipelineTableView'
 import PipelineHeader from '@/components/ui/PipelineHeader'
+import CardPreview from '@/components/pipeline/CardPreview'
+
 
 export default function SalesPipelinePage() {
+  
   const [stages, setStages] = useState<(PipelineStage & { deals: Deal[] })[]>(
     []
   )
@@ -27,6 +30,8 @@ export default function SalesPipelinePage() {
 
   const [pipelineId, setPipelineId] = useState<string | null>(null)
   const [firstStageId, setFirstStageId] = useState<string | null>(null)
+  const [previewAccountId, setPreviewAccountId] = useState<string | null>(null)
+
 
   const supabase = createClient()
 
@@ -227,7 +232,7 @@ export default function SalesPipelinePage() {
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-        <PipelineHeader title="Sales Pipeline" />
+        <PipelineHeader title="Sales Pipeline" accountCount={stages.reduce((sum, s) => sum + s.deals.length, 0)} />
 
           <p className="text-sm text-gray-500 mt-0.5">
             Track deals from lead to close. Won deals automatically create
@@ -345,11 +350,13 @@ export default function SalesPipelinePage() {
                   ) : (
                     stage.deals.map(deal => (
                       <div
-                        key={deal.id}
-                        draggable
-                        onDragStart={() => setDraggedDeal(deal.id)}
-                        className="bg-white border border-gray-200 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:border-gray-300 transition-colors"
-                      >
+  key={deal.id}
+  draggable
+  onDragStart={() => setDraggedDeal(deal.id)}
+  onClick={() => setPreviewAccountId(deal.id)}
+  className="bg-white border border-gray-200 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:border-gray-300 transition-colors"
+>
+                      
                         <div className="text-sm font-medium text-gray-900 mb-1">
                           {deal.name}
                         </div>
@@ -492,7 +499,9 @@ export default function SalesPipelinePage() {
             </div>
           </div>
         </div>
+        
       )}
+      <CardPreview accountId={previewAccountId} onClose={() => setPreviewAccountId(null)} />
     </div>
   )
 }

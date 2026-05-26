@@ -6,13 +6,19 @@ import type { Account, Pipeline, PipelineStage } from '@/lib/types'
 import Link from 'next/link'
 import { AccountTableView, ViewToggle } from '@/components/ui/PipelineTableView'
 import PipelineHeader from '@/components/ui/PipelineHeader'
+import CardPreview from '@/components/pipeline/CardPreview'
 
 export default function RetentionPipelinePage() {
   const [pipeline, setPipeline] = useState<Pipeline | null>(null)
-  const [stages, setStages] = useState<(PipelineStage & { accounts: Account[] })[]>([])
+  const [stages, setStages] = useState<
+    (PipelineStage & { accounts: Account[] })[]
+  >([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'kanban' | 'table'>('kanban')
   const [draggedAccount, setDraggedAccount] = useState<string | null>(null)
+
+  // Preview modal state
+  const [previewAccountId, setPreviewAccountId] = useState<string | null>(null)
 
   const supabase = createClient()
 
@@ -58,7 +64,7 @@ export default function RetentionPipelinePage() {
       .eq('pipeline_id', pipelineData.id)
       .order('sort_order')
 
-    // Get accounts for this pipeline
+    // Get accounts
     const { data: accountsData } = await supabase
       .from('accounts')
       .select('*')
@@ -136,20 +142,21 @@ export default function RetentionPipelinePage() {
 
   return (
     <div>
-      <div>
-        <div className="flex items-center justify-between mb-6">
-        <PipelineHeader title="Retention Pipeline" />
-          
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+        <PipelineHeader title="Retention Pipeline" accountCount={stages.reduce((sum, s) => sum + s.accounts.length, 0)} />
 
-          <ViewToggle view={view} onToggle={setView} />
+          <p className="text-sm text-gray-500 mt-0.5">
+            Track accounts from onboarding to renewal. Drag to move between
+            stages.
+          </p>
         </div>
 
-        <p className="text-sm text-gray-500 mt-0.5">
-          Track accounts from onboarding to renewal. Drag to move between
-          stages.
-        </p>
+        <ViewToggle view={view} onToggle={setView} />
       </div>
 
+      {/* New Account */}
       <Link
         href="/accounts/new"
         className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium"
@@ -173,7 +180,7 @@ export default function RetentionPipelinePage() {
               key={stage.id}
               className="flex-1 min-w-[200px] max-w-[280px] flex flex-col"
             >
-              {/* Stage header */}
+              {/* Stage Header */}
               <div
                 className="rounded-t-lg px-3 py-2 flex items-center justify-between"
                 style={{ background: stage.color }}
@@ -187,7 +194,7 @@ export default function RetentionPipelinePage() {
                 </span>
               </div>
 
-              {/* Stage body */}
+              {/* Stage Body */}
               <div
                 className="flex-1 border border-t-0 border-gray-200 rounded-b-lg p-2 space-y-2 transition-colors"
                 onDragOver={handleDragOver}
@@ -204,35 +211,34 @@ export default function RetentionPipelinePage() {
                       key={account.id}
                       draggable
                       onDragStart={() => handleDragStart(account.id)}
-                      className="bg-white border border-gray-200 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:border-gray-300 transition-colors"
+                      onClick={() => setPreviewAccountId(account.id)}
+                      className="bg-white border border-gray-200 rounded-lg p-3 cursor-pointer cursor-grab active:cursor-grabbing hover:border-gray-300 transition-colors"
                     >
-                      <Link href={`/accounts/${account.id}`}>
-                        <div className="text-sm font-medium text-gray-900 mb-1">
-                          {account.name}
-                        </div>
+                      <div className="text-sm font-medium text-gray-900 mb-1">
+                        {account.name}
+                      </div>
 
-                        <div className="text-xs text-gray-400 mb-2">
-                          {account.industry}
-                        </div>
+                      <div className="text-xs text-gray-400 mb-2">
+                        {account.industry}
+                      </div>
 
-                        <div className="flex items-center justify-between">
-                          <span
-                            className={`text-xs font-medium ${
-                              account.health_score_total >= 15
-                                ? 'text-green-700'
-                                : account.health_score_total >= 10
-                                ? 'text-amber-700'
-                                : 'text-red-700'
-                            }`}
-                          >
-                            {account.health_score_total}/20
-                          </span>
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`text-xs font-medium ${
+                            account.health_score_total >= 15
+                              ? 'text-green-700'
+                              : account.health_score_total >= 10
+                              ? 'text-amber-700'
+                              : 'text-red-700'
+                          }`}
+                        >
+                          {account.health_score_total}/20
+                        </span>
 
-                          <span className="text-xs font-medium text-gray-700">
-                            {formatNaira(account.contract_value_annual)}
-                          </span>
-                        </div>
-                      </Link>
+                        <span className="text-xs font-medium text-gray-700">
+                          {formatNaira(account.contract_value_annual)}
+                        </span>
+                      </div>
                     </div>
                   ))
                 )}
@@ -241,6 +247,12 @@ export default function RetentionPipelinePage() {
           ))}
         </div>
       )}
+
+      {/* Card Preview Modal */}
+      <CardPreview
+        accountId={previewAccountId}
+        onClose={() => setPreviewAccountId(null)}
+      />
     </div>
   )
 }

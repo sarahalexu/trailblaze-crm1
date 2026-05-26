@@ -45,7 +45,8 @@ export function canAdmin(role: UserRole): boolean {
 
 // What sidebar items each role sees
 export function getVisibleNavItems(role: UserRole): string[] {
-  const base = ['Dashboard', 'Retention pipeline', 'Sales pipeline', 'Accounts', 'Contacts',
+
+  const base = ['Dashboard',  'Tasks', 'Retention pipeline', 'Sales pipeline', 'Accounts', 'Contacts',
     'Interactions', 'Playbooks', 'Analytics', 'Reports', 'Revenue at risk', 'Help centre', 'Settings']
 
   if (role === 'viewer') return base

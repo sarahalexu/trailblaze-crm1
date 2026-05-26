@@ -1,4 +1,7 @@
 // src/app/(dashboard)/accounts/[id]/page.tsx
+// COMPLETE: All tabs wired - Timeline, Contacts, Playbooks, Stakeholders, Portal, Health
+// Includes: Email composer, task creation, AI panel, KEEP scoring
+
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -8,25 +11,30 @@ import Link from 'next/link'
 import { usePlanLimits } from '@/hooks/usePlanLimits'
 import { useParams } from 'next/navigation'
 import Icons from '@/components/ui/Icons'
+import UnifiedTimeline from '@/components/timeline/UnifiedTimeline'
+import EmailComposer from '@/components/email/EmailComposer'
+import StakeholderMap from '@/components/stakeholder/StakeholderMap'
+import PortalAccessManager from '@/components/portal/PortalAccessManager'
 
-type TabKey = 'timeline' | 'contacts' | 'playbooks' | 'health'
+type TabKey = 'timeline' | 'contacts' | 'playbooks' | 'stakeholders' | 'portal' | 'health'
 
 export default function AccountDetailPage() {
   const { id } = useParams()
   const [account, setAccount] = useState<Account | null>(null)
   const [contacts, setContacts] = useState<Contact[]>([])
-  const [interactions, setInteractions] = useState<Interaction[]>([])
   const [playbooks, setPlaybooks] = useState<any[]>([])
   const [assignments, setAssignments] = useState<any[]>([])
   const [healthHistory, setHealthHistory] = useState<any[]>([])
-  const [emailTracking, setEmailTracking] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState<TabKey>('timeline')
   const [loading, setLoading] = useState(true)
   const [showScoreModal, setShowScoreModal] = useState(false)
   const [showInteractionModal, setShowInteractionModal] = useState(false)
   const [showPlaybookModal, setShowPlaybookModal] = useState(false)
+  const [showEmailComposer, setShowEmailComposer] = useState(false)
+  const [showTaskModal, setShowTaskModal] = useState(false)
   const [keepScores, setKeepScores] = useState({ k: 0, e: 0, ex: 0, p: 0 })
   const { check, UpgradeModal } = usePlanLimits()
+
   // Interaction form
   const [intChannel, setIntChannel] = useState('call')
   const [intDirection, setIntDirection] = useState('outbound')
@@ -35,6 +43,13 @@ export default function AccountDetailPage() {
   const [intFollowUp, setIntFollowUp] = useState(false)
   const [intFollowUpDate, setIntFollowUpDate] = useState('')
   const [intContactId, setIntContactId] = useState('')
+
+  // Task form
+  const [taskTitle, setTaskTitle] = useState('')
+  const [taskType, setTaskType] = useState('follow_up')
+  const [taskDueDate, setTaskDueDate] = useState('')
+  const [taskContactId, setTaskContactId] = useState('')
+
   const [saving, setSaving] = useState(false)
   const [aiResult, setAiResult] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
@@ -57,21 +72,7 @@ export default function AccountDetailPage() {
     const { data: contactsData } = await supabase.from('contacts').select('*').eq('account_id', id).order('is_primary', { ascending: false })
     setContacts(contactsData || [])
 
-    const { data: interactionsData } = await supabase.from('interactions')
-      .select('*, user:users(id, full_name), contact:contacts(id, full_name)')
-      .eq('account_id', id).order('created_at', { ascending: false }).limit(50)
-    setInteractions(interactionsData || [])
-
-    // Load email tracking for this account's interactions
-    const { data: trackingData } = await supabase.from('email_tracking')
-      .select('*')
-      .eq('account_id', id)
-      .order('sent_at', { ascending: false })
-    setEmailTracking(trackingData || [])
-
-    const { data: playbooksData } = await supabase.from('playbooks')
-      .select('*, steps:playbook_steps(*)').eq('is_active', true)
-      .or('is_system_default.eq.true')
+    const { data: playbooksData } = await supabase.from('playbooks').select('*, steps:playbook_steps(*)').eq('is_active', true).or('is_system_default.eq.true')
     setPlaybooks((playbooksData || []).map(p => ({ ...p, steps: (p.steps || []).sort((a: any, b: any) => a.step_number - b.step_number) })))
 
     const { data: assignData } = await supabase.from('playbook_assignments')
@@ -104,9 +105,7 @@ export default function AccountDetailPage() {
         scoring_method: 'manual',
       })
     }
-    setSaving(false)
-    setShowScoreModal(false)
-    loadAccount()
+    setSaving(false); setShowScoreModal(false); loadAccount()
   }
 
   async function logInteraction() {
@@ -122,10 +121,27 @@ export default function AccountDetailPage() {
       contact_id: intContactId || null, follow_up_required: intFollowUp, follow_up_date: intFollowUpDate || null,
     })
 
-    setSaving(false)
-    setShowInteractionModal(false)
+    setSaving(false); setShowInteractionModal(false)
     setIntSubject(''); setIntContent(''); setIntFollowUp(false); setIntFollowUpDate(''); setIntContactId('')
     loadAccount()
+  }
+
+  async function createTask() {
+    if (!account || !taskTitle.trim()) return
+    setSaving(true)
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase.from('users').select('id, org_id').eq('auth_id', authUser?.id).single()
+    if (!profile) return
+
+    await supabase.from('tasks').insert({
+      org_id: profile.org_id, title: taskTitle.trim(), task_type: taskType,
+      due_date: taskDueDate || null, account_id: account.id,
+      contact_id: taskContactId || null,
+      assigned_to_user_id: profile.id, created_by_user_id: profile.id,
+    })
+
+    setSaving(false); setShowTaskModal(false)
+    setTaskTitle(''); setTaskType('follow_up'); setTaskDueDate(''); setTaskContactId('')
   }
 
   async function activatePlaybook(playbookId: string) {
@@ -133,7 +149,6 @@ export default function AccountDetailPage() {
     const { data: { user: authUser } } = await supabase.auth.getUser()
     const { data: profile } = await supabase.from('users').select('id, org_id').eq('auth_id', authUser?.id).single()
     if (!profile) return
-
     const playbook = playbooks.find(p => p.id === playbookId)
     if (!playbook) return
 
@@ -142,35 +157,26 @@ export default function AccountDetailPage() {
     }).select().single()
 
     if (assignment && playbook.steps) {
-      const progressRows = playbook.steps.map((step: any) => ({
-        assignment_id: assignment.id, step_id: step.id, status: 'pending',
-      }))
-      await supabase.from('playbook_step_progress').insert(progressRows)
+      await supabase.from('playbook_step_progress').insert(
+        playbook.steps.map((step: any) => ({ assignment_id: assignment.id, step_id: step.id, status: 'pending' }))
+      )
     }
-
-    setShowPlaybookModal(false)
-    loadAccount()
+    setShowPlaybookModal(false); loadAccount()
   }
 
   async function updateStepProgress(progressId: string, newStatus: string) {
     const { data: { user: authUser } } = await supabase.auth.getUser()
     const { data: profile } = await supabase.from('users').select('id').eq('auth_id', authUser?.id).single()
-
     await supabase.from('playbook_step_progress').update({
-      status: newStatus,
-      completed_by_user_id: newStatus === 'completed' ? profile?.id : null,
+      status: newStatus, completed_by_user_id: newStatus === 'completed' ? profile?.id : null,
       completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
     }).eq('id', progressId)
 
-    // Check if all steps complete
     const assignment = assignments.find(a => a.progress?.some((p: any) => p.id === progressId))
     if (assignment) {
       const allDone = assignment.progress.every((p: any) => p.id === progressId ? newStatus === 'completed' || newStatus === 'skipped' : p.status === 'completed' || p.status === 'skipped')
-      if (allDone) {
-        await supabase.from('playbook_assignments').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', assignment.id)
-      }
+      if (allDone) await supabase.from('playbook_assignments').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', assignment.id)
     }
-
     loadAccount()
   }
 
@@ -184,10 +190,7 @@ export default function AccountDetailPage() {
     if (!check('use_ai')) return
     setAiLoading(true); setAiAction(action); setShowAiPanel(true); setAiResult('')
     try {
-      const res = await fetch('/api/ai/analyze', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accountId: id, action }),
-      })
+      const res = await fetch('/api/ai/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId: id, action }) })
       const data = await res.json()
       setAiResult(data.result || data.error || 'Something went wrong.')
     } catch { setAiResult('Failed to connect to AI service.') }
@@ -199,22 +202,17 @@ export default function AccountDetailPage() {
   function formatAIText(text: string): React.ReactNode {
     const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/)
     return parts.map((part, i) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        return <strong key={i} className="font-semibold text-gray-900">{part.slice(2, -2)}</strong>
-      }
-      if (part.startsWith('*') && part.endsWith('*')) {
-        return <em key={i}>{part.slice(1, -1)}</em>
-      }
+      if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} className="font-semibold text-gray-900">{part.slice(2, -2)}</strong>
+      if (part.startsWith('*') && part.endsWith('*')) return <em key={i}>{part.slice(1, -1)}</em>
       return part
     })
   }
 
-  const channelIcons: Record<string, string> = { whatsapp: '\uD83D\uDCAC', email: '\uD83D\uDCE7', call: '\uD83D\uDCDE', meeting: '\uD83E\uDD1D', sms: '\uD83D\uDCF1', in_person: '\uD83D\uDC64', other: '\uD83D\uDCDD' }
-
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin"></div></div>
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin" /></div>
   if (!account) return <div className="text-center py-16 text-gray-500">Account not found.</div>
 
   const total = account.health_score_total
+  const primaryContact = contacts.find(c => c.is_primary) || contacts[0]
 
   return (
     <div>
@@ -238,18 +236,31 @@ export default function AccountDetailPage() {
               {account.assigned_user && <span>Managed by {account.assigned_user.full_name}</span>}
             </div>
           </div>
+
+          {/* Action buttons */}
           <div className="flex gap-2 flex-wrap">
-            <button onClick={() => runAI('risk_analysis')} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5" title="AI Risk Analysis"> 
+            <button onClick={() => runAI('risk_analysis')} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
               <Icons.ai className="w-4 h-4" /> Risk analysis
             </button>
-            <button onClick={() => runAI('next_action')} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5" title="AI Next Action">
-              <span>💡</span> Suggest action
+            <button onClick={() => runAI('next_action')} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
+              {'\u{1F4A1}'} Suggest action
             </button>
-            <button onClick={() => runAI('draft_message')} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5" title="AI Draft Message">
-              <span>✍️</span> Draft message
+            <button onClick={() => setShowEmailComposer(true)} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
+              {'\u{1F4E7}'} Send email
             </button>
-            <button onClick={() => setShowScoreModal(true)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-1.5"><Icons.heart className="w-4 h-4" /> Update KEEP</button>
-            <button onClick={() => setShowInteractionModal(true)} className="px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5" style={{ background: '#2b0548', color: '#e1b3ee' }}><Icons.plus className="w-4 h-4" /> Log interaction</button>
+            <button onClick={() => setShowTaskModal(true)} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
+              {'\u{1F4CB}'} Add task
+            </button>
+            <button onClick={() => setShowScoreModal(true)} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
+              <Icons.heart className="w-4 h-4" /> Update KEEP
+            </button>
+            <button onClick={() => setShowInteractionModal(true)} className="px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-1.5" style={{ background: '#2b0548', color: '#e1b3ee' }}>
+              <Icons.plus className="w-4 h-4" /> Log interaction
+            </button>
+            <button onClick={() => setShowEmailComposer(true)}
+  className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
+  📧 Send email
+</button>
           </div>
         </div>
 
@@ -273,57 +284,36 @@ export default function AccountDetailPage() {
           <div><span className="text-gray-500">Renewal:</span> <span className="font-medium">{formatDate(account.renewal_date)}</span></div>
           <div><span className="text-gray-500">Last contact:</span> <span className="font-medium">{formatDate(account.last_interaction_at)}</span></div>
         </div>
-        {account.notes && (
-          <div className="mt-3 pt-3 border-t border-gray-100">
-            <p className="text-sm text-gray-600">{account.notes}</p>
-          </div>
-        )}
+        {account.notes && <div className="mt-3 pt-3 border-t border-gray-100"><p className="text-sm text-gray-600">{account.notes}</p></div>}
       </div>
 
-      {/* AI Result Panel - FIXED */}
+      {/* AI Result Panel */}
       {showAiPanel && (
         <div className="bg-white border border-purple-200 rounded-xl mb-6 overflow-hidden">
           <div className="flex items-center justify-between px-5 pt-4 pb-2">
             <div className="flex items-center gap-2">
-              <span className="text-sm">🤖</span>
-              <h3 className="text-sm font-medium text-gray-900">
-                {aiAction === 'risk_analysis' ? 'Risk Analysis' : aiAction === 'draft_message' ? 'Draft Message' : 'Suggested Next Action'}
-              </h3>
+              <span className="text-sm">{'\u{1F916}'}</span>
+              <h3 className="text-sm font-medium text-gray-900">{aiAction === 'risk_analysis' ? 'Risk Analysis' : aiAction === 'draft_message' ? 'Draft Message' : 'Suggested Next Action'}</h3>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">AI</span>
             </div>
             <button onClick={() => setShowAiPanel(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
           </div>
           <div className="px-5 pb-5">
             {aiLoading ? (
-              <div className="flex items-center gap-3 py-4">
-                <div className="w-5 h-5 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin"></div>
-                <span className="text-sm text-gray-500">Analyzing {account.name}...</span>
-              </div>
+              <div className="flex items-center gap-3 py-4"><div className="w-5 h-5 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin" /><span className="text-sm text-gray-500">Analyzing {account.name}...</span></div>
             ) : (
-              <>
-                <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
-                  {aiResult.split('\n').map((line, idx) => {
-                    const trimmed = line.trim()
-                    if (!trimmed) return <br key={idx} />
-                    if (trimmed.startsWith('### ')) return <h4 key={idx} className="font-semibold text-gray-900 mt-3 mb-1 text-sm">{trimmed.slice(4)}</h4>
-                    if (trimmed.startsWith('## ')) return <h3 key={idx} className="font-semibold text-gray-900 mt-3 mb-1 text-sm">{trimmed.slice(3)}</h3>
-                    if (trimmed.startsWith('# ')) return <h2 key={idx} className="font-semibold text-gray-900 mt-4 mb-2">{trimmed.slice(2)}</h2>
-                    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-                      return <div key={idx} className="flex gap-2 ml-1 my-0.5"><span className="text-purple-500 flex-shrink-0">{'\u2022'}</span><span>{formatAIText(trimmed.slice(2))}</span></div>
-                    }
-                    const numMatch = trimmed.match(/^(\d+)\.\s(.+)/)
-                    if (numMatch) {
-                      return <div key={idx} className="flex gap-2 ml-1 my-0.5"><span className="text-purple-500 font-medium flex-shrink-0">{numMatch[1]}.</span><span>{formatAIText(numMatch[2])}</span></div>
-                    }
-                    return <p key={idx} className="my-0.5">{formatAIText(trimmed)}</p>
-                  })}
-                </div>
-                {aiAction === 'draft_message' && aiResult && (
-                  <button onClick={() => navigator.clipboard.writeText(aiResult)} className="mt-3 px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
-                    Copy message
-                  </button>
-                )}
-              </>
+              <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
+                {aiResult.split('\n').map((line, idx) => {
+                  const t = line.trim()
+                  if (!t) return <br key={idx} />
+                  if (t.startsWith('### ')) return <h4 key={idx} className="font-semibold text-gray-900 mt-3 mb-1 text-sm">{t.slice(4)}</h4>
+                  if (t.startsWith('## ')) return <h3 key={idx} className="font-semibold text-gray-900 mt-3 mb-1 text-sm">{t.slice(3)}</h3>
+                  if (t.startsWith('- ') || t.startsWith('* ')) return <div key={idx} className="flex gap-2 ml-1 my-0.5"><span className="text-purple-500 flex-shrink-0">{'\u2022'}</span><span>{formatAIText(t.slice(2))}</span></div>
+                  const numMatch = t.match(/^(\d+)\.\s(.+)/)
+                  if (numMatch) return <div key={idx} className="flex gap-2 ml-1 my-0.5"><span className="text-purple-500 font-medium flex-shrink-0">{numMatch[1]}.</span><span>{formatAIText(numMatch[2])}</span></div>
+                  return <p key={idx} className="my-0.5">{formatAIText(t)}</p>
+                })}
+              </div>
             )}
           </div>
         </div>
@@ -331,60 +321,29 @@ export default function AccountDetailPage() {
 
       {/* Tabs */}
       <div className="flex gap-0 border-b border-gray-200 mb-5 overflow-x-auto">
-        {([{ key: 'timeline' as TabKey, label: `Timeline (${interactions.length})` }, { key: 'contacts' as TabKey, label: `Contacts (${contacts.length})` }, { key: 'playbooks' as TabKey, label: `Playbooks (${assignments.filter(a => a.status === 'in_progress').length})` }, { key: 'health' as TabKey, label: 'Health history' }]).map(tab => (
-          <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`px-4 py-2.5 text-sm whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.key ? 'border-purple-700 text-purple-700 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{tab.label}</button>
+        {([
+          { key: 'timeline' as TabKey, label: 'Timeline' },
+          { key: 'contacts' as TabKey, label: `Contacts (${contacts.length})` },
+          { key: 'playbooks' as TabKey, label: `Playbooks (${assignments.filter(a => a.status === 'in_progress').length})` },
+          { key: 'stakeholders' as TabKey, label: 'Stakeholders' },
+          { key: 'portal' as TabKey, label: 'Client portal' },
+          { key: 'health' as TabKey, label: 'Health history' },
+        ]).map(tab => (
+          <button key={tab.key} onClick={() => {
+            // Paywall Scale features
+            if (tab.key === 'stakeholders' && !check('stakeholder_map')) return
+            if (tab.key === 'portal' && !check('client_portal')) return
+            setActiveTab(tab.key)
+          }} className={`px-4 py-2.5 text-sm whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.key ? 'border-purple-700 text-purple-700 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+            {tab.label}
+            {(tab.key === 'stakeholders' || tab.key === 'portal') && <span className="ml-1 text-[9px] px-1 py-0.5 rounded bg-purple-100 text-purple-600">Scale</span>}
+          </button>
         ))}
       </div>
 
       {/* TIMELINE TAB */}
       {activeTab === 'timeline' && (
-        <div className="space-y-3">
-          {interactions.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-sm text-gray-500 mb-4">No interactions logged yet.</p>
-              <button onClick={() => setShowInteractionModal(true)} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: '#2b0548', color: '#e1b3ee' }}>+ Log first interaction</button>
-            </div>
-          ) : interactions.map(i => {
-            // Find tracking data for this interaction
-            const tracking = emailTracking.find(t => t.interaction_id === i.id) ||
-              (i.channel === 'email' && i.direction === 'outbound'
-                ? emailTracking.find(t => t.contact_id === i.contact_id && Math.abs(new Date(t.sent_at).getTime() - new Date(i.created_at).getTime()) < 60000)
-                : null)
-
-            return (
-            <div key={i.id} className="bg-white border border-gray-200 rounded-lg p-4 flex gap-3">
-              <div className="text-lg">{channelIcons[i.channel] || '\uD83D\uDCDD'}</div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <span className="text-sm font-medium text-gray-900">{i.subject || i.channel}</span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${i.direction === 'outbound' ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{i.direction}</span>
-                  {/* Email tracking badges */}
-                  {tracking && tracking.open_count > 0 && (
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-green-50 text-green-700 flex items-center gap-1">
-                      👁 Opened {tracking.open_count}x
-                    </span>
-                  )}
-                  {tracking && tracking.open_count === 0 && i.direction === 'outbound' && (
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-50 text-gray-500">
-                      Not opened yet
-                    </span>
-                  )}
-                </div>
-                {i.content && <p className="text-sm text-gray-600 mb-2 line-clamp-2">{i.content}</p>}
-                <div className="flex items-center gap-4 text-xs text-gray-400 flex-wrap">
-                  <span>{new Date(i.created_at).toLocaleString('en-NG')}</span>
-                  {i.user && <span>by {i.user.full_name}</span>}
-                  {i.contact && <span>with {i.contact.full_name}</span>}
-                  {i.follow_up_required && <span className="text-amber-600 font-medium">Follow-up needed</span>}
-                  {tracking && tracking.first_opened_at && (
-                    <span className="text-green-600">First opened: {new Date(tracking.first_opened_at).toLocaleString('en-NG')}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-            )
-          })}
-        </div>
+        <UnifiedTimeline accountId={id as string} contacts={contacts.map(c => ({ id: c.id, full_name: c.full_name, email: c.email }))} />
       )}
 
       {/* CONTACTS TAB */}
@@ -392,7 +351,7 @@ export default function AccountDetailPage() {
         <div className="space-y-3">
           {contacts.length === 0 ? <div className="text-center py-12 text-sm text-gray-500">No contacts added yet.</div> :
             contacts.map(c => (
-              <div key={c.id} className="bg-white border border-gray-200 rounded-lg p-4 flex items-center gap-4">
+              <Link key={c.id} href={`/contacts/${c.id}`} className="bg-white border border-gray-200 rounded-lg p-4 flex items-center gap-4 hover:border-gray-300 transition-colors block">
                 <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium" style={{ background: '#2b054815', color: '#5a1890' }}>
                   {c.full_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
                 </div>
@@ -404,11 +363,11 @@ export default function AccountDetailPage() {
                   </div>
                   <div className="text-xs text-gray-500 mt-0.5">
                     {c.job_title && <span>{c.job_title}</span>}
-                    {c.email && <span> · {c.email}</span>}
-                    {c.whatsapp_number && <span> · {c.whatsapp_number}</span>}
+                    {c.email && <span> {'\u00B7'} {c.email}</span>}
+                    {c.whatsapp_number && <span> {'\u00B7'} {c.whatsapp_number}</span>}
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
         </div>
       )}
@@ -420,45 +379,33 @@ export default function AccountDetailPage() {
             <h3 className="text-sm font-medium text-gray-900">Active playbooks</h3>
             <button onClick={() => setShowPlaybookModal(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: '#2b0548', color: '#e1b3ee' }}>+ Activate playbook</button>
           </div>
-
           {assignments.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-sm text-gray-500 mb-4">No playbooks activated for this account.</p>
-              <button onClick={() => setShowPlaybookModal(true)} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: '#2b0548', color: '#e1b3ee' }}>+ Activate first playbook</button>
+            <div className="text-center py-12 bg-gray-50 rounded-xl">
+              <p className="text-2xl mb-2">{'\u{1F4D6}'}</p>
+              <p className="text-sm text-gray-600 mb-1">No playbooks running on this account</p>
+              <p className="text-xs text-gray-400 mb-4">Playbooks guide you through step-by-step workflows like onboarding, renewal prep, or recovery.</p>
+              <button onClick={() => setShowPlaybookModal(true)} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: '#2b0548', color: '#e1b3ee' }}>Activate a playbook</button>
             </div>
           ) : assignments.map(a => {
             const progress = (a.progress || []).sort((x: any, y: any) => (x.step?.step_number || 0) - (y.step?.step_number || 0))
             const completed = progress.filter((p: any) => p.status === 'completed' || p.status === 'skipped').length
             const pct = progress.length > 0 ? Math.round((completed / progress.length) * 100) : 0
-
             return (
               <div key={a.id} className="bg-white border border-gray-200 rounded-xl p-5 mb-4">
                 <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">{a.playbook?.name}</div>
-                    <div className="text-xs text-gray-500">Started {formatDate(a.started_at)} · {a.status}</div>
-                  </div>
+                  <div><div className="text-sm font-medium text-gray-900">{a.playbook?.name}</div><div className="text-xs text-gray-500">Started {formatDate(a.started_at)}</div></div>
                   <div className="text-sm font-medium" style={{ color: '#5a1890' }}>{pct}%</div>
                 </div>
-
-                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-4">
-                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#5a1890' }} />
-                </div>
-
+                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-4"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: '#5a1890' }} /></div>
                 <div className="space-y-2">
                   {progress.map((p: any) => (
                     <div key={p.id} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
                       <button onClick={() => updateStepProgress(p.id, p.status === 'completed' ? 'pending' : 'completed')}
-                        className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${p.status === 'completed' ? 'border-green-500 bg-green-500 text-white' : p.status === 'skipped' ? 'border-gray-300 bg-gray-100' : 'border-gray-300 hover:border-purple-400'}`}>
-                        {p.status === 'completed' && <span className="text-xs">✓</span>}
-                        {p.status === 'skipped' && <span className="text-xs text-gray-400">{'\u2014'}</span>}
+                        className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${p.status === 'completed' ? 'border-green-500 bg-green-500 text-white' : p.status === 'skipped' ? 'border-gray-300 bg-gray-100' : 'border-gray-300 hover:border-purple-400'}`}>
+                        {p.status === 'completed' && <span className="text-xs">{'\u2713'}</span>}
                       </button>
-                      <div className="flex-1">
-                        <div className={`text-sm ${p.status === 'completed' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{p.step?.title || 'Step'}</div>
-                      </div>
-                      {p.status !== 'completed' && p.status !== 'skipped' && (
-                        <button onClick={() => updateStepProgress(p.id, 'skipped')} className="text-xs text-gray-400 hover:text-gray-600">Skip</button>
-                      )}
+                      <div className="flex-1"><div className={`text-sm ${p.status === 'completed' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{p.step?.title || 'Step'}</div></div>
+                      {p.status !== 'completed' && p.status !== 'skipped' && <button onClick={() => updateStepProgress(p.id, 'skipped')} className="text-xs text-gray-400 hover:text-gray-600">Skip</button>}
                     </div>
                   ))}
                 </div>
@@ -468,11 +415,26 @@ export default function AccountDetailPage() {
         </div>
       )}
 
+      {/* STAKEHOLDERS TAB */}
+      {activeTab === 'stakeholders' && account && (
+        <StakeholderMap accountId={account.id} orgId={account.org_id} />
+      )}
+
+      {/* CLIENT PORTAL TAB */}
+      {activeTab === 'portal' && account && (
+        <PortalAccessManager accountId={account.id} orgId={account.org_id} />
+      )}
+
       {/* HEALTH HISTORY TAB */}
       {activeTab === 'health' && (
         <div>
           {healthHistory.length === 0 ? (
-            <div className="text-center py-12 text-sm text-gray-500">No health score history yet. Score this account to start tracking changes.</div>
+            <div className="text-center py-12 bg-gray-50 rounded-xl">
+              <p className="text-2xl mb-2">{'\u{1F4C8}'}</p>
+              <p className="text-sm text-gray-600 mb-1">No health score history yet</p>
+              <p className="text-xs text-gray-400 mb-4">Score this account using the KEEP framework to start tracking changes over time.</p>
+              <button onClick={() => setShowScoreModal(true)} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: '#2b0548', color: '#e1b3ee' }}>Score this account</button>
+            </div>
           ) : (
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
               <table className="w-full text-sm">
@@ -514,14 +476,10 @@ export default function AccountDetailPage() {
               <div key={dim.key} className="mb-4">
                 <div className="flex items-center justify-between mb-1"><span className="text-sm font-medium" style={{ color: dim.color }}>{dim.label}</span><span className="text-sm font-medium text-gray-900">{keepScores[dim.key as keyof typeof keepScores]}/5</span></div>
                 <p className="text-xs text-gray-400 mb-2">{dim.desc}</p>
-                <input type="range" min="0" max="5" step="1" value={keepScores[dim.key as keyof typeof keepScores]}
-                  onChange={e => setKeepScores(prev => ({ ...prev, [dim.key]: parseInt(e.target.value) }))} className="w-full" style={{ accentColor: dim.color }} />
+                <input type="range" min="0" max="5" step="1" value={keepScores[dim.key as keyof typeof keepScores]} onChange={e => setKeepScores(prev => ({ ...prev, [dim.key]: parseInt(e.target.value) }))} className="w-full" style={{ accentColor: dim.color }} />
               </div>
             ))}
-            <div className="bg-gray-50 rounded-lg p-3 mb-5 text-center">
-              <div className="text-xs text-gray-500">Total</div>
-              <div className="text-2xl font-medium" style={{ color: '#2b0548' }}>{keepScores.k + keepScores.e + keepScores.ex + keepScores.p}/20</div>
-            </div>
+            <div className="bg-gray-50 rounded-lg p-3 mb-5 text-center"><div className="text-xs text-gray-500">Total</div><div className="text-2xl font-medium" style={{ color: '#2b0548' }}>{keepScores.k + keepScores.e + keepScores.ex + keepScores.p}/20</div></div>
             <div className="flex gap-3">
               <button onClick={() => setShowScoreModal(false)} className="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-700">Cancel</button>
               <button onClick={updateHealthScore} disabled={saving} className="flex-1 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50" style={{ background: '#2b0548', color: '#e1b3ee' }}>{saving ? 'Saving...' : 'Save score'}</button>
@@ -537,52 +495,40 @@ export default function AccountDetailPage() {
             <h3 className="text-lg font-medium text-gray-900 mb-4">Log interaction</h3>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Channel</label>
-                  <select value={intChannel} onChange={e => setIntChannel(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white">
-                    <option value="call">📞 Call</option>
-                    <option value="meeting">🤝 Meeting</option>
-                    <option value="email">📧 Email</option>
-                    <option value="whatsapp">💬 WhatsApp</option>
-                    <option value="in_person">👤 In person</option>
-                    <option value="sms">📱 SMS</option>
-                    <option value="other">📝 Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Direction</label>
-                  <select value={intDirection} onChange={e => setIntDirection(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white">
-                    <option value="outbound">Outbound (you reached out)</option>
-                    <option value="inbound">Inbound (they reached out)</option>
-                  </select>
-                </div>
+                <div><label className="block text-sm text-gray-600 mb-1">Channel</label><select value={intChannel} onChange={e => setIntChannel(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white"><option value="call">{'\u{1F4DE}'} Call</option><option value="meeting">{'\u{1F91D}'} Meeting</option><option value="email">{'\u{1F4E7}'} Email</option><option value="whatsapp">{'\u{1F4AC}'} WhatsApp</option><option value="in_person">{'\u{1F464}'} In person</option><option value="other">{'\u{1F4DD}'} Other</option></select></div>
+                <div><label className="block text-sm text-gray-600 mb-1">Direction</label><select value={intDirection} onChange={e => setIntDirection(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white"><option value="outbound">Outbound</option><option value="inbound">Inbound</option></select></div>
               </div>
-              {contacts.length > 0 && (
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Contact (optional)</label>
-                  <select value={intContactId} onChange={e => setIntContactId(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white">
-                    <option value="">Select contact</option>
-                    {contacts.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-                  </select>
-                </div>
-              )}
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Subject *</label>
-                <input type="text" value={intSubject} onChange={e => setIntSubject(e.target.value)} placeholder="e.g. Quarterly review call" className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Notes</label>
-                <textarea value={intContent} onChange={e => setIntContent(e.target.value)} rows={3} placeholder="Key points, decisions, action items..." className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" />
-              </div>
-              <div className="flex items-center gap-3">
-                <input type="checkbox" id="followup" checked={intFollowUp} onChange={e => setIntFollowUp(e.target.checked)} className="w-4 h-4 rounded" />
-                <label htmlFor="followup" className="text-sm text-gray-700">Follow-up required</label>
-                {intFollowUp && <input type="date" value={intFollowUpDate} onChange={e => setIntFollowUpDate(e.target.value)} className="px-2 py-1 border border-gray-300 rounded text-sm" />}
-              </div>
+              {contacts.length > 0 && <div><label className="block text-sm text-gray-600 mb-1">Contact</label><select value={intContactId} onChange={e => setIntContactId(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white"><option value="">Select contact</option>{contacts.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}</select></div>}
+              <div><label className="block text-sm text-gray-600 mb-1">Subject *</label><input type="text" value={intSubject} onChange={e => setIntSubject(e.target.value)} placeholder="e.g. Quarterly review call" className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" /></div>
+              <div><label className="block text-sm text-gray-600 mb-1">Notes</label><textarea value={intContent} onChange={e => setIntContent(e.target.value)} rows={3} placeholder="Key points, decisions, action items..." className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" /></div>
+              <div className="flex items-center gap-3"><input type="checkbox" id="followup" checked={intFollowUp} onChange={e => setIntFollowUp(e.target.checked)} className="w-4 h-4 rounded" /><label htmlFor="followup" className="text-sm text-gray-700">Follow-up required</label>{intFollowUp && <input type="date" value={intFollowUpDate} onChange={e => setIntFollowUpDate(e.target.value)} className="px-2 py-1 border border-gray-300 rounded text-sm" />}</div>
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowInteractionModal(false)} className="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-700">Cancel</button>
               <button onClick={logInteraction} disabled={saving || !intSubject} className="flex-1 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50" style={{ background: '#2b0548', color: '#e1b3ee' }}>{saving ? 'Saving...' : 'Log interaction'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TASK MODAL */}
+      {showTaskModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowTaskModal(false)}>
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6 mx-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Add task for {account.name}</h3>
+            <div className="space-y-3">
+              <input type="text" value={taskTitle} onChange={e => setTaskTitle(e.target.value)} placeholder="What needs to be done?" autoFocus className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm" />
+              <div className="grid grid-cols-2 gap-3">
+                <select value={taskType} onChange={e => setTaskType(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                  <option value="follow_up">{'\u{1F514}'} Follow-up</option><option value="call">{'\u{1F4DE}'} Call</option><option value="email">{'\u{1F4E7}'} Email</option><option value="meeting">{'\u{1F91D}'} Meeting</option><option value="task">{'\u{1F4CB}'} Task</option>
+                </select>
+                <input type="date" value={taskDueDate} onChange={e => setTaskDueDate(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+              </div>
+              {contacts.length > 0 && <select value={taskContactId} onChange={e => setTaskContactId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"><option value="">Link to contact (optional)</option>{contacts.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}</select>}
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setShowTaskModal(false)} className="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-700">Cancel</button>
+              <button onClick={createTask} disabled={saving || !taskTitle.trim()} className="flex-1 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50" style={{ background: '#2b0548', color: '#e1b3ee' }}>{saving ? 'Creating...' : 'Create task'}</button>
             </div>
           </div>
         </div>
@@ -598,18 +544,10 @@ export default function AccountDetailPage() {
               {playbooks.map(pb => {
                 const alreadyActive = assignments.some(a => a.playbook_id === pb.id && a.status === 'in_progress')
                 return (
-                  <div key={pb.id} className={`border rounded-lg p-4 ${alreadyActive ? 'border-gray-200 bg-gray-50' : 'border-gray-200 hover:border-purple-300 cursor-pointer'}`}
-                    onClick={() => !alreadyActive && activatePlaybook(pb.id)}>
+                  <div key={pb.id} className={`border rounded-lg p-4 ${alreadyActive ? 'border-gray-200 bg-gray-50' : 'border-gray-200 hover:border-purple-300 cursor-pointer'}`} onClick={() => !alreadyActive && activatePlaybook(pb.id)}>
                     <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">{pb.name}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">{pb.steps?.length || 0} steps · {pb.category}</div>
-                      </div>
-                      {alreadyActive ? (
-                        <span className="text-xs text-gray-400">Already active</span>
-                      ) : (
-                        <span className="text-xs font-medium" style={{ color: '#5a1890' }}>Activate</span>
-                      )}
+                      <div><div className="text-sm font-medium text-gray-900">{pb.name}</div><div className="text-xs text-gray-500 mt-0.5">{pb.steps?.length || 0} steps {'\u00B7'} {pb.category}</div></div>
+                      {alreadyActive ? <span className="text-xs text-gray-400">Already active</span> : <span className="text-xs font-medium" style={{ color: '#5a1890' }}>Activate</span>}
                     </div>
                     {pb.description && <p className="text-xs text-gray-400 mt-2">{pb.description}</p>}
                   </div>
@@ -620,6 +558,17 @@ export default function AccountDetailPage() {
           </div>
         </div>
       )}
+
+      <EmailComposer
+        isOpen={showEmailComposer}
+        onClose={() => setShowEmailComposer(false)}
+        onSent={() => loadAccount()}
+        toEmail={primaryContact?.email || undefined}
+        toName={primaryContact?.full_name}
+        accountId={account.id}
+        contactId={primaryContact?.id}
+      />
+
       <UpgradeModal />
     </div>
   )

@@ -5,6 +5,10 @@ import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import PlanBanner from '@/components/ui/PlanBanner'
+import DashboardTasks from '@/components/ui/DashboardTasks'
+import SetupChecklist from '@/components/ui/SetupChecklist'
+
+
 
 // SVG Donut Chart component
 function DonutChart({ data, size = 140 }: { data: { label: string; value: number; color: string }[]; size?: number }) {
@@ -202,6 +206,9 @@ export default function DashboardPage() {
         <div className="lg:col-span-2 h-72 tb-skeleton rounded-xl" />
         <div className="h-72 tb-skeleton rounded-xl" />
       </div>
+      <div>
+    <DashboardTasks />
+  </div>
     </div>
   )
 
@@ -209,6 +216,7 @@ export default function DashboardPage() {
 
   return (
     <div style={{ animation: 'fadeIn 0.3s ease' }}>
+       <SetupChecklist />
       {/* Greeting */}
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-gray-900" style={{ letterSpacing: '-0.02em' }}>
@@ -245,6 +253,7 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+
 
       {/* Main content — charts + accounts */}
       <div className="grid lg:grid-cols-3 gap-4 mb-6">
