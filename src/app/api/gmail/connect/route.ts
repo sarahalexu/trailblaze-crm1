@@ -3,7 +3,7 @@
 // without relying on cookies (which break during OAuth redirects)
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!
@@ -18,7 +18,7 @@ const SCOPES = [
 
 export async function GET(req: NextRequest) {
   // Get the logged-in user BEFORE redirecting to Google
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
