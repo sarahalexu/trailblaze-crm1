@@ -1,10 +1,9 @@
 // src/app/api/gmail/callback/route.ts
-// Handles Google OAuth callback, exchanges code for tokens, stores connection
+// FIXED: Reads user auth_id from state parameter instead of cookies
+// Cookies break during OAuth redirects, state parameter survives
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!
@@ -18,12 +17,33 @@ const supabaseAdmin = createClient(
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get('code')
   const error = req.nextUrl.searchParams.get('error')
+  const stateParam = req.nextUrl.searchParams.get('state')
 
   if (error || !code) {
     return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=${error || 'no_code'}`)
   }
 
   try {
+    // Decode user auth ID from state parameter
+    let authId: string | null = null
+    if (stateParam) {
+      try {
+        const stateData = JSON.parse(Buffer.from(stateParam, 'base64url').toString())
+        authId = stateData.authId
+
+        // Check timestamp to prevent replay (1 hour window)
+        if (stateData.timestamp && Date.now() - stateData.timestamp > 3600000) {
+          return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=expired`)
+        }
+      } catch {
+        return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=invalid_state`)
+      }
+    }
+
+    if (!authId) {
+      return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=no_user`)
+    }
+
     // Exchange code for tokens
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -51,18 +71,15 @@ export async function GET(req: NextRequest) {
     const profile = await profileRes.json()
     const gmailAddress = profile.email
 
-    // Get the logged-in CRM user
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data: { user: authUser } } = await supabase.auth.getUser()
-
-    if (!authUser) {
-      return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=not_logged_in`)
+    if (!gmailAddress) {
+      return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=no_email`)
     }
 
+    // Find the CRM user using the auth ID from state
     const { data: crmUser } = await supabaseAdmin
       .from('users')
       .select('id, org_id')
-      .eq('auth_id', authUser.id)
+      .eq('auth_id', authId)
       .single()
 
     if (!crmUser) {
@@ -90,16 +107,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=save_failed`)
     }
 
-    // Trigger initial sync
-    try {
-      await fetch(`${APP_URL}/api/gmail/sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: crmUser.id }),
-      })
-    } catch {
-      // Sync will happen on next interval, not blocking
-    }
+    // Trigger initial sync (non-blocking)
+    fetch(`${APP_URL}/api/gmail/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: crmUser.id }),
+    }).catch(() => {})
 
     return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=connected&email=${encodeURIComponent(gmailAddress)}`)
   } catch (err: any) {
