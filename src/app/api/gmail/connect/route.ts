@@ -3,11 +3,13 @@
 // without relying on cookies (which break during OAuth redirects)
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://crm.trailblazeafrica.com'
+const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL ||
+  'https://crm.trailblazeafrica.com'
 
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
@@ -18,19 +20,26 @@ const SCOPES = [
 
 export async function GET(req: NextRequest) {
   // Get the logged-in user BEFORE redirecting to Google
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const supabase = createRouteHandlerClient({ cookies })
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   if (!user) {
-    return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=not_logged_in`)
+    return NextResponse.redirect(
+      `${APP_URL}/settings/integrations?gmail=error&reason=not_logged_in`
+    )
   }
 
   // Encode the user's auth ID in the state parameter
   // This lets the callback identify the user without needing cookies
-  const state = Buffer.from(JSON.stringify({
-    authId: user.id,
-    timestamp: Date.now(),
-  })).toString('base64url')
+  const state = Buffer.from(
+    JSON.stringify({
+      authId: user.id,
+      timestamp: Date.now(),
+    })
+  ).toString('base64url')
 
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
