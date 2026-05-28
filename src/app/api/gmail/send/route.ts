@@ -6,6 +6,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://crm.trailblazeafrica.com'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -64,6 +65,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'to, subject, and body are required' }, { status: 400 })
     }
 
+    // Create email tracking record with unique tracking ID
+    const trackingCode = crypto.randomUUID().replace(/-/g, '').slice(0, 32)
+    let trackingRecordId: string | null = null
+    try {
+      const { data: trackingRecord } = await supabaseAdmin.from('email_tracking').insert({
+        org_id: profile.org_id,
+        tracking_id: trackingCode,
+        account_id: accountId || null,
+        contact_id: contactId || null,
+        recipient_email: Array.isArray(to) ? to[0] : to,
+        subject: subject,
+        sent_at: new Date().toISOString(),
+        open_count: 0,
+      }).select('id').single()
+
+      if (trackingRecord) trackingRecordId = trackingRecord.id
+    } catch (e) {
+      console.error('Email tracking record creation failed:', e)
+    }
+
+    // Inject tracking pixel into email body
+    let emailBody = body.replace(/\n/g, '<br/>')
+    if (trackingRecordId) {
+      emailBody += `<img src="${APP_URL}/api/notifications/email-opened?id=${trackingRecordId}" width="1" height="1" style="display:none" />`
+    }
+
     const toHeader = Array.isArray(to) ? to.join(', ') : to
     const ccHeader = cc ? (Array.isArray(cc) ? cc.join(', ') : cc) : ''
 
@@ -80,7 +107,7 @@ export async function POST(req: NextRequest) {
       emailLines.push(`References: ${replyToMessageId}`)
     }
     emailLines.push('')
-    emailLines.push(body)
+    emailLines.push(emailBody)
 
     const rawEmail = emailLines.join('\r\n')
     const encodedEmail = btoa(unescape(encodeURIComponent(rawEmail)))
@@ -109,38 +136,70 @@ export async function POST(req: NextRequest) {
     const sentData = await sendRes.json()
 
     // Log as synced email
-    await supabaseAdmin.from('synced_emails').insert({
-      org_id: profile.org_id,
-      gmail_connection_id: connection.id,
-      gmail_message_id: sentData.id,
-      gmail_thread_id: sentData.threadId || sentData.id,
-      account_id: accountId || null,
-      contact_id: contactId || null,
-      direction: 'outbound',
-      from_address: connection.gmail_address,
-      from_name: '',
-      to_addresses: JSON.stringify(Array.isArray(to) ? to : [to]),
-      cc_addresses: JSON.stringify(cc ? (Array.isArray(cc) ? cc : [cc]) : []),
-      subject,
-      body_preview: body.replace(/<[^>]*>/g, '').slice(0, 500),
-      body_html: body,
-      has_attachments: false,
-      is_read: true,
-      labels: JSON.stringify(['SENT']),
-      sent_at: new Date().toISOString(),
-    }).catch(() => {})
+    try {
+      await supabaseAdmin.from('synced_emails').insert({
+        org_id: profile.org_id,
+        gmail_connection_id: connection.id,
+        gmail_message_id: sentData.id,
+        gmail_thread_id: sentData.threadId || sentData.id,
+        account_id: accountId || null,
+        contact_id: contactId || null,
+        direction: 'outbound',
+        from_address: connection.gmail_address,
+        from_name: '',
+        to_addresses: JSON.stringify(Array.isArray(to) ? to : [to]),
+        cc_addresses: JSON.stringify(cc ? (Array.isArray(cc) ? cc : [cc]) : []),
+        subject,
+        body_preview: body.replace(/<[^>]*>/g, '').slice(0, 500),
+        body_html: emailBody,
+        has_attachments: false,
+        is_read: true,
+        labels: JSON.stringify(['SENT']),
+        sent_at: new Date().toISOString(),
+      })
+    } catch (e) {
+      console.error('Failed to log synced email:', e)
+    }
 
-    // Also log as interaction
-    await supabaseAdmin.from('interactions').insert({
-      org_id: profile.org_id,
-      account_id: accountId || null,
-      contact_id: contactId || null,
-      user_id: profile.id,
-      channel: 'email',
-      direction: 'outbound',
-      subject,
-      content: body.replace(/<[^>]*>/g, '').slice(0, 2000),
-    }).catch(() => {})
+    // Log as interaction
+    try {
+      await supabaseAdmin.from('interactions').insert({
+        org_id: profile.org_id,
+        account_id: accountId || null,
+        contact_id: contactId || null,
+        user_id: profile.id,
+        channel: 'email',
+        direction: 'outbound',
+        subject,
+        content: body.replace(/<[^>]*>/g, '').slice(0, 2000),
+      })
+    } catch (e) {
+      console.error('Failed to log interaction:', e)
+    }
+
+    // Link tracking record to the interaction
+    if (trackingRecordId) {
+      try {
+        // Get the interaction we just created to link them
+        const { data: lastInteraction } = await supabaseAdmin.from('interactions')
+          .select('id')
+          .eq('org_id', profile.org_id)
+          .eq('user_id', profile.id)
+          .eq('channel', 'email')
+          .eq('subject', subject)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+
+        if (lastInteraction) {
+          await supabaseAdmin.from('email_tracking').update({
+            interaction_id: lastInteraction.id,
+          }).eq('id', trackingRecordId)
+        }
+      } catch (e) {
+        console.error('Failed to link tracking:', e)
+      }
+    }
 
     return NextResponse.json({ success: true, messageId: sentData.id, threadId: sentData.threadId })
   } catch (err: any) {
