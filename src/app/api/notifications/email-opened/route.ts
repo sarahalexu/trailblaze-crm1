@@ -1,6 +1,5 @@
 // src/app/api/notifications/email-opened/route.ts
-// Called by email tracking pixel or webhook when an email is opened
-// Creates a notification for the sender
+// Tracking pixel endpoint - updates open count and creates notification
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -10,70 +9,109 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function POST(req: NextRequest) {
-  try {
-    const { trackingId, emailId } = await req.json()
+// 1x1 transparent GIF
+const PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')
 
-    // Look up the email tracking record
+function pixelResponse() {
+  return new NextResponse(PIXEL, {
+    headers: {
+      'Content-Type': 'image/gif',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+    },
+  })
+}
+
+// GET - called by the tracking pixel in the email
+export async function GET(req: NextRequest) {
+  const trackingId = req.nextUrl.searchParams.get('id')
+
+  if (!trackingId) return pixelResponse()
+
+  try {
+    // Look up the tracking record
     const { data: tracking } = await supabaseAdmin
       .from('email_tracking')
       .select('*, contact:contacts(full_name), account:accounts(id, name)')
-      .eq('id', trackingId || emailId)
+      .eq('id', trackingId)
       .single()
 
-    if (!tracking) {
-      return NextResponse.json({ error: 'Tracking record not found' }, { status: 404 })
-    }
+    if (!tracking) return pixelResponse()
 
-    // Update tracking counts
+    // Update open count
     const isFirstOpen = tracking.open_count === 0
     await supabaseAdmin.from('email_tracking').update({
       open_count: (tracking.open_count || 0) + 1,
       first_opened_at: isFirstOpen ? new Date().toISOString() : tracking.first_opened_at,
       last_opened_at: new Date().toISOString(),
+      user_agent: req.headers.get('user-agent') || null,
     }).eq('id', tracking.id)
 
-    // Only notify on first open
-    if (isFirstOpen && tracking.user_id) {
-      const contactName = tracking.contact?.full_name || tracking.recipient_email || 'Someone'
-      const accountName = tracking.account?.name || ''
+    // Create notification on first open
+    if (isFirstOpen) {
+      // Find who to notify: look up the gmail connection for this org
+      const { data: gmailConn } = await supabaseAdmin
+        .from('gmail_connections')
+        .select('user_id')
+        .eq('org_id', tracking.org_id)
+        .eq('is_active', true)
+        .limit(1)
+        .single()
 
-      await supabaseAdmin.from('notifications').insert({
-        user_id: tracking.user_id,
-        org_id: tracking.org_id,
-        type: 'email_opened',
-        title: `${contactName} opened your email`,
-        message: `"${tracking.subject || 'No subject'}"${accountName ? ` (${accountName})` : ''}`,
-        reference_type: tracking.account_id ? 'account' : null,
-        reference_id: tracking.account_id || null,
-      })
+      // Fallback: find via the linked interaction
+      let notifyUserId = gmailConn?.user_id || null
+      if (!notifyUserId && tracking.interaction_id) {
+        const { data: interaction } = await supabaseAdmin
+          .from('interactions')
+          .select('user_id')
+          .eq('id', tracking.interaction_id)
+          .single()
+        notifyUserId = interaction?.user_id || null
+      }
+
+      if (notifyUserId) {
+        const contactName = tracking.contact?.full_name || tracking.recipient_email || 'Someone'
+        const accountName = tracking.account?.name || ''
+
+        try {
+          await supabaseAdmin.from('notifications').insert({
+            user_id: notifyUserId,
+            org_id: tracking.org_id,
+            type: 'email_opened',
+            title: `${contactName} opened your email`,
+            message: `"${tracking.subject || 'No subject'}"${accountName ? ` (${accountName})` : ''}`,
+            reference_type: tracking.account_id ? 'account' : null,
+            reference_id: tracking.account_id || null,
+          })
+        } catch (e) {
+          console.error('Failed to create notification:', e)
+        }
+      }
     }
-
-    return NextResponse.json({ success: true, firstOpen: isFirstOpen })
-  } catch (err: any) {
-    console.error('Email open notification error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err) {
+    console.error('Email tracking error:', err)
   }
+
+  // Always return the pixel, even if tracking fails
+  return pixelResponse()
 }
 
-// GET endpoint for tracking pixel (1x1 transparent GIF)
-export async function GET(req: NextRequest) {
-  const trackingId = req.nextUrl.searchParams.get('id')
-  if (trackingId) {
-    // Fire and forget the notification
-    fetch(req.nextUrl.origin + '/api/notifications/email-opened', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ trackingId }),
-    }).catch(() => {})
-  }
+// POST - alternative endpoint for webhook-style calls
+export async function POST(req: NextRequest) {
+  try {
+    const { trackingId, emailId } = await req.json()
+    const id = trackingId || emailId
+    if (!id) return NextResponse.json({ error: 'trackingId required' }, { status: 400 })
 
-  // Return 1x1 transparent GIF
-  const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')
-  return new NextResponse(pixel, {
-    headers: {
-      'Content-Type': 'image/gif',
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
-    },
-  })
+    // Reuse the same logic by creating a fake request to the GET handler
+    const url = new URL(req.url)
+    url.searchParams.set('id', id)
+    const fakeReq = new NextRequest(url)
+    await GET(fakeReq)
+
+    return NextResponse.json({ success: true })
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 })
+  }
 }
