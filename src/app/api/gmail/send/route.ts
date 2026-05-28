@@ -1,10 +1,8 @@
 // src/app/api/gmail/send/route.ts
-// Send emails via Gmail API from inside the CRM
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!
@@ -18,7 +16,6 @@ async function getValidToken(connection: any): Promise<string | null> {
   if (connection.token_expires_at && new Date(connection.token_expires_at) > new Date()) {
     return connection.access_token
   }
-  // Refresh
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -42,7 +39,7 @@ async function getValidToken(connection: any): Promise<string | null> {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createServerSupabaseClient()
     const { data: { user: authUser } } = await supabase.auth.getUser()
     if (!authUser) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
@@ -67,7 +64,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'to, subject, and body are required' }, { status: 400 })
     }
 
-    // Build the email in RFC 2822 format
     const toHeader = Array.isArray(to) ? to.join(', ') : to
     const ccHeader = cc ? (Array.isArray(cc) ? cc.join(', ') : cc) : ''
 
@@ -79,12 +75,10 @@ export async function POST(req: NextRequest) {
     emailLines.push(`Subject: ${subject}`)
     emailLines.push('Content-Type: text/html; charset=utf-8')
     emailLines.push('MIME-Version: 1.0')
-
     if (replyToMessageId) {
       emailLines.push(`In-Reply-To: ${replyToMessageId}`)
       emailLines.push(`References: ${replyToMessageId}`)
     }
-
     emailLines.push('')
     emailLines.push(body)
 
@@ -94,7 +88,6 @@ export async function POST(req: NextRequest) {
       .replace(/\//g, '_')
       .replace(/=+$/, '')
 
-    // Send via Gmail API
     const sendBody: any = { raw: encodedEmail }
     if (threadId) sendBody.threadId = threadId
 
@@ -135,7 +128,7 @@ export async function POST(req: NextRequest) {
       is_read: true,
       labels: JSON.stringify(['SENT']),
       sent_at: new Date().toISOString(),
-    }).catch(() => {}) // Non-blocking
+    }).catch(() => {})
 
     // Also log as interaction
     await supabaseAdmin.from('interactions').insert({
@@ -147,7 +140,6 @@ export async function POST(req: NextRequest) {
       direction: 'outbound',
       subject,
       content: body.replace(/<[^>]*>/g, '').slice(0, 2000),
-      whatsapp_message_id: null,
     }).catch(() => {})
 
     return NextResponse.json({ success: true, messageId: sentData.id, threadId: sentData.threadId })
