@@ -1,9 +1,8 @@
 // src/app/api/gmail/callback/route.ts
-// FIXED: Reads user auth_id from state parameter instead of cookies
-// Cookies break during OAuth redirects, state parameter survives
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { cookies } from 'next/headers'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!
@@ -17,31 +16,18 @@ const supabaseAdmin = createClient(
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get('code')
   const error = req.nextUrl.searchParams.get('error')
-  const stateParam = req.nextUrl.searchParams.get('state')
 
   if (error || !code) {
     return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=${error || 'no_code'}`)
   }
 
   try {
-    // Decode user auth ID from state parameter
-    let authId: string | null = null
-    if (stateParam) {
-      try {
-        const stateData = JSON.parse(Buffer.from(stateParam, 'base64url').toString())
-        authId = stateData.authId
-
-        // Check timestamp to prevent replay (1 hour window)
-        if (stateData.timestamp && Date.now() - stateData.timestamp > 3600000) {
-          return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=expired`)
-        }
-      } catch {
-        return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=invalid_state`)
-      }
-    }
+    // Read auth ID from cookie we set before the redirect
+    const cookieStore = cookies()
+    const authId = cookieStore.get('tb_gmail_auth')?.value
 
     if (!authId) {
-      return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=no_user`)
+      return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=session_expired`)
     }
 
     // Exchange code for tokens
@@ -64,7 +50,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=token_failed`)
     }
 
-    // Get user email from Google
+    // Get Gmail address
     const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     })
@@ -75,7 +61,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=no_email`)
     }
 
-    // Find the CRM user using the auth ID from state
+    // Find CRM user
     const { data: crmUser } = await supabaseAdmin
       .from('users')
       .select('id, org_id')
@@ -86,7 +72,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=user_not_found`)
     }
 
-    // Store or update the Gmail connection
+    // Save connection
     const { error: upsertError } = await supabaseAdmin
       .from('gmail_connections')
       .upsert({
@@ -103,9 +89,15 @@ export async function GET(req: NextRequest) {
       })
 
     if (upsertError) {
-      console.error('Failed to save Gmail connection:', upsertError)
+      console.error('Gmail save error:', upsertError)
       return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=save_failed`)
     }
+
+    // Clear the temp cookie and redirect with success
+    const response = NextResponse.redirect(
+      `${APP_URL}/settings/integrations?gmail=connected&email=${encodeURIComponent(gmailAddress)}`
+    )
+    response.cookies.delete('tb_gmail_auth')
 
     // Trigger initial sync (non-blocking)
     fetch(`${APP_URL}/api/gmail/sync`, {
@@ -114,7 +106,7 @@ export async function GET(req: NextRequest) {
       body: JSON.stringify({ userId: crmUser.id }),
     }).catch(() => {})
 
-    return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=connected&email=${encodeURIComponent(gmailAddress)}`)
+    return response
   } catch (err: any) {
     console.error('Gmail callback error:', err)
     return NextResponse.redirect(`${APP_URL}/settings/integrations?gmail=error&reason=unknown`)
