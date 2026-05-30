@@ -91,8 +91,7 @@ export default function SignupPage() {
         style={{ background: 'linear-gradient(135deg, #2b0548 0%, #5a1890 100%)' }}>
         <div>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center text-white font-semibold text-lg">TB</div>
-            <span className="text-white text-xl font-medium">TrailBlaze CRM</span>
+          <img src="/logo-white.png" alt="TrailBlaze CRM" className="h-12 w-auto object-contain" />
           </div>
         </div>
         <div className="space-y-6">
@@ -125,9 +124,7 @@ export default function SignupPage() {
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md">
           <div className="lg:hidden flex items-center gap-3 mb-8">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-semibold"
-              style={{ background: '#2b0548' }}>TB</div>
-            <span className="text-lg font-medium text-gray-900">TrailBlaze CRM</span>
+          <img src="/logo-black.png" alt="TrailBlaze CRM" className="h-9 w-auto object-contain" />
           </div>
 
           <h2 className="text-2xl font-medium text-gray-900 mb-1">

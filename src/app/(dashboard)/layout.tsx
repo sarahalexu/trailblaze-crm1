@@ -134,8 +134,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18M3 6h18M3 18h18" /></svg>
           </button>
           <Link href="/dashboard" className="flex items-center gap-2.5">
-          <img src="/logo-black.png" alt="TrailBlaze CRM" className="h-8 object-contain dark:hidden" />
-          <img src="/logo-white.png" alt="TrailBlaze CRM" className="h-8 object-contain hidden dark:block" />
+          <img src="/logo-black.png" alt="TrailBlaze CRM" className="h-12 w-auto object-contain dark:hidden" />
+//   <img src="/logo-white.png" alt="TrailBlaze CRM" className="h-12 w-auto object-contain hidden dark:block" />
           </Link>
         </div>
 
