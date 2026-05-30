@@ -49,6 +49,7 @@ export default function InteractionsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [gmailConnected, setGmailConnected] = useState(false)
   const [waConnected, setWaConnected] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const supabase = createClient()
 
   useEffect(() => { loadAll() }, [])
@@ -330,6 +331,20 @@ export default function InteractionsPage() {
           className="flex-1 max-w-xs px-3 py-2 bg-gray-100 border-0 rounded-lg text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white"
         />
       </div>
+
+      <button
+  onClick={async () => {
+    setSyncing(true)
+    await fetch('/api/gmail/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    await loadAll()
+    setSyncing(false)
+  }}
+  disabled={syncing}
+  className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5"
+>
+  {syncing ? 'Syncing...' : '↻ Sync emails'}
+</button>
+
 
       {/* Inbox list */}
       {filtered.length === 0 ? (

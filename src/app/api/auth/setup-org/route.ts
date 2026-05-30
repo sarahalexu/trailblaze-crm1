@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     }
 
     // CREATE USER
-    const { error: userError } = await (supabaseAdmin
+    const { data: newUser, error: userError } = await (supabaseAdmin
       .from('users') as any)
       .insert([
         {
@@ -63,6 +63,8 @@ export async function POST(request: Request) {
           role: 'admin',
         },
       ])
+      .select()
+      .single()
 
     if (userError) {
       throw userError
@@ -80,6 +82,21 @@ export async function POST(request: Request) {
     if (setupError) {
       throw setupError
     }
+
+    // SEND WELCOME EMAIL (non-blocking)
+    fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/billing/lifecycle-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        event: 'welcome',
+        userId: newUser.id,
+        orgId: org.id,
+      }),
+    }).catch((err) => {
+      console.error('Welcome email failed:', err)
+    })
 
     return NextResponse.json({
       success: true,
