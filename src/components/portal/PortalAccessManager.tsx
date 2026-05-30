@@ -5,7 +5,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/lib/supabase/client'
 
 interface PortalAccessManagerProps {
   accountId: string;
@@ -30,7 +30,7 @@ interface PortalLink {
 }
 
 export default function PortalAccessManager({ accountId, orgId }: PortalAccessManagerProps) {
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
 
   const [links, setLinks] = useState<PortalLink[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);

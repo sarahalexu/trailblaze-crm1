@@ -289,8 +289,8 @@ export default function AccountDetailPage() {
 
       {/* AI Result Panel */}
       {showAiPanel && (
-        <div className="bg-white border border-purple-200 rounded-xl mb-6 overflow-hidden">
-          <div className="flex items-center justify-between px-5 pt-4 pb-2">
+        <div className="bg-white border border-purple-200 rounded-xl mb-6">
+        <div className="flex items-center justify-between px-5 pt-4 pb-2">
             <div className="flex items-center gap-2">
               <span className="text-sm">{'\u{1F916}'}</span>
               <h3 className="text-sm font-medium text-gray-900">{aiAction === 'risk_analysis' ? 'Risk Analysis' : aiAction === 'draft_message' ? 'Draft Message' : 'Suggested Next Action'}</h3>

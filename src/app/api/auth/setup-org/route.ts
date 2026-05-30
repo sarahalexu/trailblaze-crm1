@@ -23,6 +23,10 @@ export async function POST(request: Request) {
       )
     }
 
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      'https://crm.trailblazeafrica.com'
+
     const slug =
       org_name
         .toLowerCase()
@@ -83,8 +87,22 @@ export async function POST(request: Request) {
       throw setupError
     }
 
-    // SEND WELCOME EMAIL (non-blocking)
-    fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/billing/lifecycle-email`, {
+    // SEND INTERNAL NEW SIGNUP NOTIFICATION
+    fetch(`${appUrl}/api/notifications/new-signup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userId: newUser.id,
+        orgId: org.id,
+      }),
+    }).catch((err) => {
+      console.error('New signup notification failed:', err)
+    })
+
+    // SEND WELCOME EMAIL
+    fetch(`${appUrl}/api/billing/lifecycle-email`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -106,8 +124,12 @@ export async function POST(request: Request) {
     console.error('Org setup error:', error)
 
     return NextResponse.json(
-      { error: error.message || 'Something went wrong' },
-      { status: 500 }
+      {
+        error: error.message || 'Something went wrong',
+      },
+      {
+        status: 500,
+      }
     )
   }
 }

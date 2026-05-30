@@ -5,7 +5,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/lib/supabase/client'
 
 interface WhatsAppChatProps {
   accountId: string;
@@ -36,7 +36,7 @@ export default function WhatsAppChat({
   contactName,
   contactPhone,
 }: WhatsAppChatProps) {
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
