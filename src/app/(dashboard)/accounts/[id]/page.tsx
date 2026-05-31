@@ -245,9 +245,9 @@ export default function AccountDetailPage() {
             <button onClick={() => runAI('next_action')} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
               {'\u{1F4A1}'} Suggest action
             </button>
-            <button onClick={() => setShowEmailComposer(true)} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
-              {'\u{1F4E7}'} Send email
-            </button>
+            <button onClick={() => runAI('draft_message')} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
+  {'\u{270F}\uFE0F'} AI draft message
+</button>
             <button onClick={() => setShowTaskModal(true)} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
               {'\u{1F4CB}'} Add task
             </button>
