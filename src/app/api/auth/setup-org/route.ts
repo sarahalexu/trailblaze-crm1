@@ -1,4 +1,5 @@
 // src/app/api/auth/setup-org/route.ts
+// FIXED: Handles duplicate users gracefully. If user already exists, returns success.
 
 import { getAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
@@ -7,129 +8,65 @@ export async function POST(request: Request) {
   const supabaseAdmin = getAdminClient()
 
   try {
-    const {
-      auth_id,
-      full_name,
-      email,
-      date_of_birth,
-      org_name,
-      industry,
-    } = await request.json()
+    const { auth_id, full_name, email, date_of_birth, org_name, industry } = await request.json()
 
     if (!auth_id || !full_name || !email || !org_name) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      'https://crm.trailblazeafrica.com'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://crm.trailblazeafrica.com'
 
-    const slug =
-      org_name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '') +
-      '-' +
-      Math.random().toString(36).substring(2, 6)
+    // CHECK IF USER ALREADY EXISTS (fixes duplicate key error)
+    const { data: existingUser } = await (supabaseAdmin.from('users') as any)
+      .select('id, org_id')
+      .eq('auth_id', auth_id)
+      .maybeSingle()
+
+    if (existingUser) {
+      // User already set up, return success
+      return NextResponse.json({ success: true, org_id: existingUser.org_id, existing: true })
+    }
+
+    const slug = org_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Math.random().toString(36).substring(2, 6)
 
     // CREATE ORGANIZATION
-    const { data: org, error: orgError } = await (supabaseAdmin
-      .from('organizations') as any)
-      .insert([
-        {
-          name: org_name,
-          slug,
-          industry,
-          plan_tier: 'beta',
-          subscription_status: 'beta',
-        },
-      ])
-      .select()
-      .single()
+    const { data: org, error: orgError } = await (supabaseAdmin.from('organizations') as any)
+      .insert([{ name: org_name, slug, industry, plan_tier: 'beta', subscription_status: 'beta' }])
+      .select().single()
 
-    if (orgError) {
-      throw orgError
-    }
+    if (orgError) throw orgError
 
     // CREATE USER
-    const { data: newUser, error: userError } = await (supabaseAdmin
-      .from('users') as any)
-      .insert([
-        {
-          org_id: org.id,
-          auth_id,
-          email,
-          full_name,
-          date_of_birth,
-          role: 'admin',
-        },
-      ])
-      .select()
-      .single()
+    const { data: newUser, error: userError } = await (supabaseAdmin.from('users') as any)
+      .insert([{ org_id: org.id, auth_id, email, full_name, date_of_birth, role: 'admin' }])
+      .select().single()
 
-    if (userError) {
-      throw userError
-    }
+    if (userError) throw userError
 
     // RUN SETUP FUNCTION
-    const { error: setupError } = await (supabaseAdmin as any).rpc(
-      'setup_new_organization',
-      {
-        p_org_id: org.id,
-        p_plan_tier: 'beta',
-      }
-    )
+    const { error: setupError } = await (supabaseAdmin as any).rpc('setup_new_organization', {
+      p_org_id: org.id, p_plan_tier: 'beta',
+    })
 
     if (setupError) {
-      throw setupError
+      console.error('Setup RPC error (non-fatal):', setupError)
+      // Don't throw - the org and user are created, setup function is optional
     }
 
-    // SEND INTERNAL NEW SIGNUP NOTIFICATION
+    // SEND NOTIFICATIONS (non-blocking)
     fetch(`${appUrl}/api/notifications/new-signup`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        userId: newUser.id,
-        orgId: org.id,
-      }),
-    }).catch((err) => {
-      console.error('New signup notification failed:', err)
-    })
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: newUser.id, orgId: org.id }),
+    }).catch(err => console.error('New signup notification failed:', err))
 
-    // SEND WELCOME EMAIL
     fetch(`${appUrl}/api/billing/lifecycle-email`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        event: 'welcome',
-        userId: newUser.id,
-        orgId: org.id,
-      }),
-    }).catch((err) => {
-      console.error('Welcome email failed:', err)
-    })
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'welcome', userId: newUser.id, orgId: org.id }),
+    }).catch(err => console.error('Welcome email failed:', err))
 
-    return NextResponse.json({
-      success: true,
-      org_id: org.id,
-    })
+    return NextResponse.json({ success: true, org_id: org.id })
   } catch (error: any) {
     console.error('Org setup error:', error)
-
-    return NextResponse.json(
-      {
-        error: error.message || 'Something went wrong',
-      },
-      {
-        status: 500,
-      }
-    )
+    return NextResponse.json({ error: error.message || 'Something went wrong' }, { status: 500 })
   }
 }

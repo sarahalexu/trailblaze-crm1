@@ -92,9 +92,32 @@ export default function CustomPipelinePage() {
     }
   }
 
+  async function deletePipeline() {
+  if (!confirm('Delete this pipeline? This cannot be undone.')) return
+
+  try {
+    await supabase
+      .from('pipeline_stages')
+      .delete()
+      .eq('pipeline_id', pipelineId)
+
+    await supabase
+      .from('pipelines')
+      .delete()
+      .eq('id', pipelineId)
+
+    router.push('/pipeline/retention')
+  } catch (error) {
+    console.error('Delete pipeline error:', error)
+    alert('Failed to delete pipeline')
+  }
+}
+
   async function handleDrop(itemId: string, newStageId: string) {
     const item = items.find((i) => i.id === itemId);
     if (!item || item.stage_id === newStageId) return;
+
+    
 
     // Optimistic update
     setItems(items.map((i) => (i.id === itemId ? { ...i, stage_id: newStageId } : i)));
@@ -185,8 +208,13 @@ export default function CustomPipelinePage() {
           >
             + New Pipeline
           </button>
+          <button onClick={deletePipeline}
+  className="px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 rounded-lg">
+  Delete pipeline
+</button>
         </div>
       </div>
+
 
       {viewMode === 'kanban' ? (
         /* Kanban View */

@@ -134,7 +134,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
           <Link href="/dashboard" className="flex items-center gap-2.5">
           <img src="/logo-black.png" alt="TrailBlaze CRM" className="h-12 w-auto object-contain dark:hidden" />
-//   <img src="/logo-white.png" alt="TrailBlaze CRM" className="h-12 w-auto object-contain hidden dark:block" />
+         <img src="/logo-white.png" alt="TrailBlaze CRM" className="h-12 w-auto object-contain hidden dark:block" />
           </Link>
         </div>
 

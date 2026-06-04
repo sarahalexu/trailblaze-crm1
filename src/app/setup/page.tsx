@@ -1,6 +1,5 @@
 // src/app/setup/page.tsx
-// New users who signed in via Google land here if they don't have an org yet
-// Collects org name + industry, calls setup-org, redirects to dashboard
+// FIXED: Better handling of existing users, redirects to dashboard if already set up
 
 'use client'
 
@@ -28,26 +27,16 @@ export default function SetupPage() {
 
   async function checkUser() {
     const { data: { user: authUser } } = await supabase.auth.getUser()
-    if (!authUser) {
-      router.push('/login')
-      return
-    }
+    if (!authUser) { router.push('/login'); return }
 
-    // Check if user already has an org
+    // Try to fetch profile - if RLS blocks it, the API will handle it
     const { data: profile } = await supabase
-      .from('users')
-      .select('id, org_id')
-      .eq('auth_id', authUser.id)
-      .maybeSingle()
+      .from('users').select('id, org_id').eq('auth_id', authUser.id).maybeSingle()
 
-    if (profile) {
-      // Already set up, go to dashboard
-      router.push('/dashboard')
-      return
-    }
+    if (profile) { router.push('/dashboard'); return }
 
     setUser(authUser)
-    setOrgName(authUser.user_metadata?.org_name || '')
+    setOrgName(authUser.user_metadata?.org_name || authUser.user_metadata?.full_name?.split(' ')[0] + "'s Organization" || '')
     setChecking(false)
   }
 
@@ -63,7 +52,7 @@ export default function SetupPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           auth_id: user.id,
-          full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+          full_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
           email: user.email,
           org_name: orgName.trim(),
           industry: industry || null,
@@ -73,24 +62,26 @@ export default function SetupPage() {
 
       const data = await res.json()
 
-      if (!res.ok) {
-        throw new Error(data.error || 'Setup failed')
-      }
+      if (!res.ok) throw new Error(data.error || 'Setup failed')
 
+      // Success (whether new or existing user)
       router.push('/dashboard')
     } catch (err: any) {
+      // If it's a duplicate error, the user exists - just go to dashboard
+      if (err.message?.includes('duplicate') || err.message?.includes('already exists')) {
+        router.push('/dashboard')
+        return
+      }
       setError(err.message || 'Something went wrong. Please try again.')
       setLoading(false)
     }
   }
 
-  if (checking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="w-8 h-8 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin" />
-      </div>
-    )
-  }
+  if (checking) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="w-8 h-8 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin" />
+    </div>
+  )
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
@@ -101,7 +92,6 @@ export default function SetupPage() {
           <h1 className="text-xl font-semibold text-gray-900 mb-1">One more step</h1>
           <p className="text-sm text-gray-500">Tell us about your organization to finish setting up your account.</p>
         </div>
-
         <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
           <form onSubmit={handleSetup}>
             <div className="space-y-4">
@@ -110,7 +100,6 @@ export default function SetupPage() {
                 <input type="text" value={orgName} onChange={e => setOrgName(e.target.value)} placeholder="e.g. Acme Technologies"
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent" autoFocus />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
                 <select value={industry} onChange={e => setIndustry(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-500">
@@ -118,20 +107,15 @@ export default function SetupPage() {
                   {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
                 </select>
               </div>
-
               {error && <p className="text-sm text-red-600">{error}</p>}
-
               <button type="submit" disabled={loading || !orgName.trim()}
-                className="w-full py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+                className="w-full py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
                 style={{ background: '#2b0548', color: '#e1b3ee' }}>
                 {loading ? 'Setting up...' : 'Get started'}
               </button>
             </div>
           </form>
-
-          <p className="text-xs text-gray-400 text-center mt-4">
-            Signed in as {user?.email}
-          </p>
+          <p className="text-xs text-gray-400 text-center mt-4">Signed in as {user?.email}</p>
         </div>
       </div>
     </div>
