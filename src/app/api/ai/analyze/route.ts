@@ -1,3 +1,7 @@
+// src/app/api/ai/analyze/route.ts
+// FIXED: maxOutputTokens increased from 600 to 1500
+// AI results were being cut off mid-sentence because 600 tokens is ~400 words
+
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
@@ -17,7 +21,7 @@ export async function POST(request: Request) {
     .eq('id', accountId).single()
   if (!account) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
 
-  const ctx = `Account: ${account.name}\nIndustry: ${account.industry || 'Unknown'}\nContract: ₦${account.contract_value_annual?.toLocaleString() || 'N/A'}/yr\nKEEP: ${account.health_score_total}/20 (K:${account.health_score_know} E:${account.health_score_engage} Ex:${account.health_score_exceed} P:${account.health_score_prevent})\nStatus: ${account.health_status}\nRenewal: ${account.renewal_date || 'Not set'}\nLast contact: ${account.last_interaction_at || 'Never'}\nContacts: ${(account.contacts||[]).map((c:any)=>`${c.full_name} (${c.role_type})`).join(', ')||'None'}\nRecent activity: ${(account.interactions||[]).slice(0,8).map((i:any)=>`[${i.created_at?.slice(0,10)}] ${i.channel} ${i.direction}: ${i.subject||''}`).join('; ')||'None'}`
+  const ctx = `Account: ${account.name}\nIndustry: ${account.industry || 'Unknown'}\nContract: \u20A6${account.contract_value_annual?.toLocaleString() || 'N/A'}/yr\nKEEP: ${account.health_score_total}/20 (K:${account.health_score_know} E:${account.health_score_engage} Ex:${account.health_score_exceed} P:${account.health_score_prevent})\nStatus: ${account.health_status}\nRenewal: ${account.renewal_date || 'Not set'}\nLast contact: ${account.last_interaction_at || 'Never'}\nContacts: ${(account.contacts||[]).map((c:any)=>`${c.full_name} (${c.role_type})`).join(', ')||'None'}\nRecent activity: ${(account.interactions||[]).slice(0,8).map((i:any)=>`[${i.created_at?.slice(0,10)}] ${i.channel} ${i.direction}: ${i.subject||''}`).join('; ')||'None'}`
 
   const prompts: Record<string, string> = {
     risk_analysis: `Expert account management consultant. Analyze this account's churn risk. Be specific, reference the data. Format: RISK LEVEL (Low/Medium/High/Critical), KEY RISKS (2-3), RECOMMENDED ACTIONS (3-4 this week), WATCH FOR (1-2 early warnings). Concise, no generic advice.\n\n${ctx}`,
@@ -30,7 +34,10 @@ export async function POST(request: Request) {
   try {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompts[action] }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 600 } }),
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompts[action] }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 1500 },
+      }),
     })
     const data = await res.json()
     if (!res.ok) return NextResponse.json({ result: `API error: ${JSON.stringify(data)}`, action })

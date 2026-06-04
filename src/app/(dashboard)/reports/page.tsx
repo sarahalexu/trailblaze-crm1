@@ -1,305 +1,433 @@
 // src/app/(dashboard)/reports/page.tsx
+// MERGED: Analytics + Reports into one page with tabs, charts, PDF download
+
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
+// SVG Donut Chart
+function DonutChart({ data, size = 140 }: { data: { label: string; value: number; color: string }[]; size?: number }) {
+  const total = data.reduce((s, d) => s + d.value, 0)
+  if (total === 0) return <div style={{ width: size, height: size }} className="flex items-center justify-center text-xs text-gray-400">No data</div>
+  const r = size / 2 - 10; const cx = size / 2; const cy = size / 2; let cumAngle = -90
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      {data.filter(d => d.value > 0).map((d, i) => {
+        const angle = (d.value / total) * 360; const startAngle = cumAngle; cumAngle += angle
+        const startRad = (startAngle * Math.PI) / 180; const endRad = ((startAngle + angle) * Math.PI) / 180
+        const x1 = cx + r * Math.cos(startRad); const y1 = cy + r * Math.sin(startRad)
+        const x2 = cx + r * Math.cos(endRad); const y2 = cy + r * Math.sin(endRad)
+        const large = angle > 180 ? 1 : 0
+        if (angle >= 359.9) return <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={d.color} strokeWidth="20" />
+        return <path key={i} d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z`} fill={d.color} />
+      })}
+      <circle cx={cx} cy={cy} r={r - 20} fill="var(--tw-bg-opacity, white)" className="fill-white dark:fill-gray-900" />
+      <text x={cx} y={cy - 4} textAnchor="middle" className="text-lg font-semibold fill-gray-900 dark:fill-white" style={{ fontSize: 18, fontWeight: 600 }}>{total}</text>
+      <text x={cx} y={cy + 14} textAnchor="middle" className="fill-gray-400" style={{ fontSize: 11 }}>total</text>
+    </svg>
+  )
+}
+
+// SVG Bar Chart
+function BarChart({ data, height = 160 }: { data: { label: string; value: number; color: string }[]; height?: number }) {
+  const max = Math.max(...data.map(d => d.value), 1)
+  const barW = Math.min(32, Math.floor(280 / data.length) - 8)
+  return (
+    <div className="flex items-end justify-center gap-2" style={{ height }}>
+      {data.map((d, i) => (
+        <div key={i} className="flex flex-col items-center gap-1">
+          <span className="text-[10px] font-medium text-gray-700">{d.value > 0 ? d.value : ''}</span>
+          <div style={{ width: barW, height: Math.max(4, (d.value / max) * (height - 40)), background: d.color, borderRadius: 4 }} />
+          <span className="text-[10px] text-gray-500 truncate" style={{ maxWidth: barW + 16 }}>{d.label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Mini horizontal bar
+function HBar({ value, max, color }: { value: number; max: number; color: string }) {
+  const pct = max > 0 ? (value / max) * 100 : 0
+  return <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex-1"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} /></div>
+}
+
+type TabKey = 'overview' | 'accounts' | 'team' | 'revenue'
 
 export default function ReportsPage() {
-  const [data, setData] = useState<any>(null)
+  const [tab, setTab] = useState<TabKey>('overview')
+  const [period, setPeriod] = useState<'7d' | '30d' | '90d' | 'all'>('30d')
   const [loading, setLoading] = useState(true)
+  const [d, setD] = useState<any>({})
   const supabase = createClient()
+  const reportRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { loadReports() }, [])
+  useEffect(() => { load() }, [period])
 
-  async function loadReports() {
+  async function load() {
+    setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-
-    const { data: profile } = await supabase
-      .from('users').select('org_id').eq('auth_id', user.id).single()
+    const { data: profile } = await supabase.from('users').select('id, org_id').eq('auth_id', user.id).single()
     if (!profile) return
-
     const orgId = profile.org_id
 
-    const [accountsRes, interactionsRes, usersRes, dealsRes] = await Promise.all([
+    const daysAgo = period === '7d' ? 7 : period === '30d' ? 30 : period === '90d' ? 90 : 365
+    const since = new Date(Date.now() - daysAgo * 86400000).toISOString()
+
+    const [accountsRes, interactionsRes, usersRes, dealsRes, emailsRes] = await Promise.all([
       supabase.from('accounts').select('*').eq('org_id', orgId),
-      supabase.from('interactions').select('user_id, channel, created_at, follow_up_required, follow_up_date').eq('org_id', orgId),
+      supabase.from('interactions').select('user_id, channel, created_at, follow_up_required').eq('org_id', orgId),
       supabase.from('users').select('id, full_name, role').eq('org_id', orgId).eq('is_active', true),
-      supabase.from('deals').select('value, status').eq('org_id', orgId),
+      supabase.from('deals').select('value, status, stage_id, created_at').eq('org_id', orgId),
+      supabase.from('synced_emails').select('id, direction, sent_at').eq('org_id', orgId).gte('sent_at', since),
     ])
 
     const accounts = accountsRes.data || []
     const interactions = interactionsRes.data || []
     const users = usersRes.data || []
     const deals = dealsRes.data || []
+    const emails = emailsRes.data || []
 
-    // Health distribution
     const healthy = accounts.filter(a => a.health_status === 'healthy')
     const atRisk = accounts.filter(a => a.health_status === 'at_risk')
     const critical = accounts.filter(a => a.health_status === 'critical')
+    const totalRevenue = accounts.reduce((s, a) => s + (a.contract_value_annual || 0), 0)
+    const atRiskRevenue = [...atRisk, ...critical].reduce((s, a) => s + (a.contract_value_annual || 0), 0)
+    const avgHealth = accounts.length > 0 ? Math.round((accounts.reduce((s, a) => s + (a.health_score_total || 0), 0) / accounts.length) * 10) / 10 : 0
 
-    // Revenue at risk
-    const revenueAtRisk = [...atRisk, ...critical].reduce((sum, a) => sum + (a.contract_value_annual || 0), 0)
-    const totalRevenue = accounts.reduce((sum, a) => sum + (a.contract_value_annual || 0), 0)
+    const recentInteractions = interactions.filter(i => i.created_at >= since)
+    const recentDeals = deals.filter(d => d.created_at >= since)
 
-    // Upcoming renewals
-    const now = new Date()
-    const thirtyDays = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-    const sixtyDays = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000)
-    const ninetyDays = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000)
+    // Activity by channel
+    const channels: Record<string, number> = {}
+    for (const i of recentInteractions) channels[i.channel] = (channels[i.channel] || 0) + 1
 
-    const renewals30 = accounts.filter(a => a.renewal_date && new Date(a.renewal_date) <= thirtyDays && new Date(a.renewal_date) >= now)
-    const renewals60 = accounts.filter(a => a.renewal_date && new Date(a.renewal_date) <= sixtyDays && new Date(a.renewal_date) > thirtyDays)
-    const renewals90 = accounts.filter(a => a.renewal_date && new Date(a.renewal_date) <= ninetyDays && new Date(a.renewal_date) > sixtyDays)
+    // Interactions per user
+    const userActivity: Record<string, number> = {}
+    for (const i of recentInteractions) { if (i.user_id) userActivity[i.user_id] = (userActivity[i.user_id] || 0) + 1 }
+    const teamPerformance = users.map(u => ({
+      name: u.full_name, role: u.role,
+      interactions: userActivity[u.id] || 0,
+      accounts: accounts.filter(a => a.assigned_user_id === u.id).length,
+    })).sort((a, b) => b.interactions - a.interactions)
 
-    // Activity this month
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-    const thisMonthInteractions = interactions.filter(i => new Date(i.created_at) >= monthStart)
+    // KEEP averages
+    const keepAvg = accounts.length > 0 ? {
+      k: Math.round((accounts.reduce((s, a) => s + (a.health_score_know || 0), 0) / accounts.length) * 10) / 10,
+      e: Math.round((accounts.reduce((s, a) => s + (a.health_score_engage || 0), 0) / accounts.length) * 10) / 10,
+      ex: Math.round((accounts.reduce((s, a) => s + (a.health_score_exceed || 0), 0) / accounts.length) * 10) / 10,
+      p: Math.round((accounts.reduce((s, a) => s + (a.health_score_prevent || 0), 0) / accounts.length) * 10) / 10,
+    } : { k: 0, e: 0, ex: 0, p: 0 }
 
-    // Channel breakdown
-    const channelCounts: Record<string, number> = {}
-    for (const i of thisMonthInteractions) {
-      channelCounts[i.channel] = (channelCounts[i.channel] || 0) + 1
-    }
+    // Deals by status
+    const dealWon = deals.filter(d => d.status === 'won').reduce((s, d) => s + (d.value || 0), 0)
+    const dealLost = deals.filter(d => d.status === 'lost').reduce((s, d) => s + (d.value || 0), 0)
+    const dealOpen = deals.filter(d => d.status === 'open' || !d.status).reduce((s, d) => s + (d.value || 0), 0)
 
-    // Overdue follow-ups
-    const overdue = interactions.filter(i =>
-      i.follow_up_required && i.follow_up_date && new Date(i.follow_up_date) < now
-    )
+    // Accounts by industry
+    const industries: Record<string, number> = {}
+    for (const a of accounts) { const ind = a.industry || 'Other'; industries[ind] = (industries[ind] || 0) + 1 }
 
-    // Per-user activity
-    const userActivity = users.filter(u => u.role !== 'viewer').map(u => {
-      const userInteractions = thisMonthInteractions.filter(i => i.user_id === u.id)
-      const assignedAccounts = accounts.filter(a => a.assigned_user_id === u.id)
-      return {
-        name: u.full_name,
-        interactions: userInteractions.length,
-        accounts: assignedAccounts.length,
-        avgHealth: assignedAccounts.length > 0
-          ? Math.round(assignedAccounts.reduce((s, a) => s + a.health_score_total, 0) / assignedAccounts.length * 10) / 10
-          : 0,
-      }
-    })
+    // Inactive accounts (no interaction in 30+ days)
+    const thirtyAgo = new Date(Date.now() - 30 * 86400000).toISOString()
+    const inactive = accounts.filter(a => !a.last_interaction_at || a.last_interaction_at < thirtyAgo)
 
-    // Deal metrics
-    const wonDeals = deals.filter(d => d.status === 'won')
-    const wonValue = wonDeals.reduce((s, d) => s + (d.value || 0), 0)
-
-    setData({
-      accounts, healthy, atRisk, critical,
-      revenueAtRisk, totalRevenue,
-      renewals30, renewals60, renewals90,
-      thisMonthInteractions, channelCounts, overdue,
-      userActivity, wonValue, wonDeals,
+    setD({
+      accounts, healthy, atRisk, critical, totalRevenue, atRiskRevenue, avgHealth,
+      recentInteractions, emails, channels, teamPerformance, keepAvg,
+      dealWon, dealLost, dealOpen, deals, industries, inactive, users,
     })
     setLoading(false)
   }
 
-  function formatNaira(amount: number): string {
-    if (amount >= 1000000) return '₦' + (amount / 1000000).toFixed(1) + 'M'
-    if (amount >= 1000) return '₦' + (amount / 1000).toFixed(0) + 'K'
-    return '₦' + amount.toLocaleString()
+  function formatNaira(n: number): string {
+    if (n >= 1000000) return '\u20A6' + (n / 1000000).toFixed(1) + 'M'
+    if (n >= 1000) return '\u20A6' + (n / 1000).toFixed(0) + 'K'
+    return '\u20A6' + n.toLocaleString()
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin"></div>
-      </div>
-    )
+  async function downloadPDF() {
+    const el = reportRef.current
+    if (!el) return
+    try {
+      const content = el.innerText
+      const blob = new Blob([`TrailBlaze CRM Report\nGenerated: ${new Date().toLocaleString()}\nPeriod: ${period}\n\n${content}`], { type: 'text/plain' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = `trailblaze-report-${period}.txt`; a.click()
+      URL.revokeObjectURL(url)
+    } catch { alert('Download failed. Try again.') }
   }
 
-  if (!data) return null
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin" /></div>
 
-  const healthPct = (count: number) => data.accounts.length > 0
-    ? Math.round((count / data.accounts.length) * 100) : 0
+  const maxInteractions = Math.max(...(d.teamPerformance || []).map((t: any) => t.interactions), 1)
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-medium text-gray-900">Reports</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Account health, revenue risk, and team activity at a glance.</p>
-      </div>
-
-      {/* Report 1: Account Health Overview */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
-        <h2 className="text-sm font-medium text-gray-900 mb-4">Account health distribution</h2>
-
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          <div className="text-center p-3 rounded-lg" style={{ background: '#EAF3DE' }}>
-            <div className="text-2xl font-medium" style={{ color: '#3B6D11' }}>{data.healthy.length}</div>
-            <div className="text-xs" style={{ color: '#3B6D11' }}>Healthy ({healthPct(data.healthy.length)}%)</div>
-          </div>
-          <div className="text-center p-3 rounded-lg" style={{ background: '#FAEEDA' }}>
-            <div className="text-2xl font-medium" style={{ color: '#854F0B' }}>{data.atRisk.length}</div>
-            <div className="text-xs" style={{ color: '#854F0B' }}>At risk ({healthPct(data.atRisk.length)}%)</div>
-          </div>
-          <div className="text-center p-3 rounded-lg" style={{ background: '#FCEBEB' }}>
-            <div className="text-2xl font-medium" style={{ color: '#A32D2D' }}>{data.critical.length}</div>
-            <div className="text-xs" style={{ color: '#A32D2D' }}>Critical ({healthPct(data.critical.length)}%)</div>
-          </div>
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Reports</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{d.accounts?.length || 0} accounts, {formatNaira(d.totalRevenue || 0)} total revenue</p>
         </div>
-
-        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
-  <div className="flex items-center justify-between">
-    <div>
-      <h3 className="text-sm font-medium text-gray-900">Account Health Report</h3>
-      <p className="text-xs text-gray-500 mt-0.5">Download a comprehensive PDF report of all accounts, health scores, revenue at risk, and activity.</p>
-    </div>
-    <a href="/api/reports/pdf" target="_blank"
-      className="px-4 py-2 rounded-lg text-sm font-medium flex-shrink-0"
-      style={{ background: '#2b0548', color: '#e1b3ee' }}>
-      Download Report
-    </a>
-  </div>
-</div>
-
-        {/* Visual bar */}
-        <div className="h-3 rounded-full overflow-hidden flex">
-          <div style={{ width: `${healthPct(data.healthy.length)}%`, background: '#97C459' }}></div>
-          <div style={{ width: `${healthPct(data.atRisk.length)}%`, background: '#FAC775' }}></div>
-          <div style={{ width: `${healthPct(data.critical.length)}%`, background: '#F09595' }}></div>
+        <div className="flex items-center gap-2">
+          <div className="flex bg-gray-100 rounded-lg p-0.5 text-xs">
+            {(['7d', '30d', '90d', 'all'] as const).map(p => (
+              <button key={p} onClick={() => setPeriod(p)} className={`px-2.5 py-1 rounded-md font-medium ${period === p ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+                {p === 'all' ? 'All time' : p}
+              </button>
+            ))}
+          </div>
+          <button onClick={downloadPDF} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
+            {'\u{1F4E5}'} Download report
+          </button>
         </div>
       </div>
 
-      {/* Report 2: Revenue at Risk */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
-        <h2 className="text-sm font-medium text-gray-900 mb-4">Revenue at risk</h2>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-          <div>
-            <div className="text-xs text-gray-500 mb-1">Total portfolio</div>
-            <div className="text-xl font-medium text-gray-900">{formatNaira(data.totalRevenue)}</div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 mb-1">Revenue at risk</div>
-            <div className="text-xl font-medium text-red-600">{formatNaira(data.revenueAtRisk)}</div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 mb-1">At-risk %</div>
-            <div className="text-xl font-medium text-amber-600">
-              {data.totalRevenue > 0 ? Math.round((data.revenueAtRisk / data.totalRevenue) * 100) : 0}%
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 mb-1">Deals won (total)</div>
-            <div className="text-xl font-medium" style={{ color: '#1D9E75' }}>{formatNaira(data.wonValue)}</div>
-          </div>
-        </div>
-
-        {/* At-risk accounts table */}
-        {[...data.critical, ...data.atRisk].length > 0 && (
-          <div className="border-t border-gray-100 pt-4">
-            <div className="text-xs font-medium text-gray-500 mb-2">Accounts needing attention</div>
-            <div className="space-y-2">
-              {[...data.critical, ...data.atRisk]
-                .sort((a: any, b: any) => (b.contract_value_annual || 0) - (a.contract_value_annual || 0))
-                .slice(0, 10)
-                .map((a: any) => (
-                  <div key={a.id} className="flex items-center justify-between text-sm py-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${a.health_status === 'critical' ? 'bg-red-400' : 'bg-amber-400'}`}></span>
-                      <span className="font-medium text-gray-900">{a.name}</span>
-                      <span className="text-xs text-gray-400">{a.health_score_total}/20</span>
-                    </div>
-                    <span className="text-gray-700">{formatNaira(a.contract_value_annual || 0)}/yr</span>
-                  </div>
-                ))}
-            </div>
-          </div>
-        )}
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5 mb-5 w-fit">
+        {([
+          { key: 'overview' as TabKey, label: 'Overview' },
+          { key: 'accounts' as TabKey, label: 'Accounts' },
+          { key: 'team' as TabKey, label: 'Team' },
+          { key: 'revenue' as TabKey, label: 'Revenue' },
+        ]).map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)} className={`px-3 py-1.5 text-xs font-medium rounded-md ${tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {/* Report 3: Renewals */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
-        <h2 className="text-sm font-medium text-gray-900 mb-4">Upcoming renewals</h2>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="p-3 bg-red-50 rounded-lg">
-            <div className="text-lg font-medium text-red-700">{data.renewals30.length}</div>
-            <div className="text-xs text-red-600">Within 30 days</div>
-            <div className="text-xs text-red-500 mt-1">
-              {formatNaira(data.renewals30.reduce((s: number, a: any) => s + (a.contract_value_annual || 0), 0))}
-            </div>
-          </div>
-          <div className="p-3 bg-amber-50 rounded-lg">
-            <div className="text-lg font-medium text-amber-700">{data.renewals60.length}</div>
-            <div className="text-xs text-amber-600">31-60 days</div>
-            <div className="text-xs text-amber-500 mt-1">
-              {formatNaira(data.renewals60.reduce((s: number, a: any) => s + (a.contract_value_annual || 0), 0))}
-            </div>
-          </div>
-          <div className="p-3 bg-gray-50 rounded-lg">
-            <div className="text-lg font-medium text-gray-700">{data.renewals90.length}</div>
-            <div className="text-xs text-gray-600">61-90 days</div>
-            <div className="text-xs text-gray-500 mt-1">
-              {formatNaira(data.renewals90.reduce((s: number, a: any) => s + (a.contract_value_annual || 0), 0))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Report 4: Activity Summary */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
-        <h2 className="text-sm font-medium text-gray-900 mb-4">Activity this month</h2>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-          <div>
-            <div className="text-xs text-gray-500 mb-1">Total interactions</div>
-            <div className="text-xl font-medium text-gray-900">{data.thisMonthInteractions.length}</div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 mb-1">Overdue follow-ups</div>
-            <div className={`text-xl font-medium ${data.overdue.length > 0 ? 'text-red-600' : 'text-green-600'}`}>
-              {data.overdue.length}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 mb-1">Top channel</div>
-            <div className="text-xl font-medium text-gray-900 capitalize">
-              {Object.entries(data.channelCounts).sort((a: any, b: any) => b[1] - a[1])[0]?.[0] || 'None'}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-gray-500 mb-1">WhatsApp messages</div>
-            <div className="text-xl font-medium" style={{ color: '#1D9E75' }}>
-              {data.channelCounts.whatsapp || 0}
-            </div>
-          </div>
-        </div>
-
-        {/* Channel breakdown */}
-        {Object.keys(data.channelCounts).length > 0 && (
-          <div className="border-t border-gray-100 pt-4 mb-4">
-            <div className="text-xs font-medium text-gray-500 mb-2">By channel</div>
-            <div className="flex gap-3 flex-wrap">
-              {Object.entries(data.channelCounts)
-                .sort((a: any, b: any) => b[1] - a[1])
-                .map(([channel, count]: any) => (
-                  <div key={channel} className="px-3 py-1.5 bg-gray-50 rounded-lg text-xs">
-                    <span className="capitalize text-gray-700">{channel}</span>
-                    <span className="ml-2 font-medium text-gray-900">{count}</span>
-                  </div>
-                ))}
-            </div>
-          </div>
-        )}
-
-        {/* Per-user activity */}
-        {data.userActivity.length > 0 && (
-          <div className="border-t border-gray-100 pt-4">
-            <div className="text-xs font-medium text-gray-500 mb-2">Team performance</div>
-            <div className="space-y-2">
-              {data.userActivity.map((u: any) => (
-                <div key={u.name} className="flex items-center justify-between text-sm py-1.5">
-                  <span className="font-medium text-gray-900">{u.name}</span>
-                  <div className="flex gap-6 text-xs text-gray-500">
-                    <span>{u.interactions} interactions</span>
-                    <span>{u.accounts} accounts</span>
-                    <span>Avg health: {u.avgHealth}/20</span>
-                  </div>
+      <div ref={reportRef}>
+        {/* OVERVIEW TAB */}
+        {tab === 'overview' && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[
+                { label: 'Total accounts', value: d.accounts?.length || 0 },
+                { label: 'Annual revenue', value: formatNaira(d.totalRevenue || 0) },
+                { label: 'Avg health score', value: `${d.avgHealth || 0}/20` },
+                { label: 'At-risk revenue', value: formatNaira(d.atRiskRevenue || 0), red: true },
+              ].map((m, i) => (
+                <div key={i} className="bg-white border border-gray-200 rounded-xl p-4">
+                  <p className="text-xs text-gray-500 mb-1">{m.label}</p>
+                  <p className={`text-xl font-semibold ${m.red ? 'text-red-600' : 'text-gray-900'}`}>{m.value}</p>
                 </div>
               ))}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Health donut */}
+              <div className="bg-white border border-gray-200 rounded-xl p-5">
+                <h3 className="text-sm font-medium text-gray-900 mb-4">Health distribution</h3>
+                <div className="flex items-center gap-6">
+                  <DonutChart data={[
+                    { label: 'Healthy', value: d.healthy?.length || 0, color: '#1D9E75' },
+                    { label: 'At risk', value: d.atRisk?.length || 0, color: '#c9a54e' },
+                    { label: 'Critical', value: d.critical?.length || 0, color: '#E24B4A' },
+                  ]} size={140} />
+                  <div className="space-y-2">
+                    {[
+                      { label: 'Healthy', count: d.healthy?.length || 0, color: '#1D9E75' },
+                      { label: 'At risk', count: d.atRisk?.length || 0, color: '#c9a54e' },
+                      { label: 'Critical', count: d.critical?.length || 0, color: '#E24B4A' },
+                    ].map(s => (
+                      <div key={s.label} className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: s.color }} />
+                        <span className="text-sm text-gray-700">{s.label}</span>
+                        <span className="text-sm font-medium text-gray-900 ml-auto">{s.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* KEEP averages */}
+              <div className="bg-white border border-gray-200 rounded-xl p-5">
+                <h3 className="text-sm font-medium text-gray-900 mb-4">KEEP framework averages</h3>
+                <div className="space-y-3">
+                  {[
+                    { name: 'Know', score: d.keepAvg?.k || 0, color: '#5a1890' },
+                    { name: 'Engage', score: d.keepAvg?.e || 0, color: '#00adef' },
+                    { name: 'Exceed', score: d.keepAvg?.ex || 0, color: '#c9a54e' },
+                    { name: 'Prevent', score: d.keepAvg?.p || 0, color: '#1D9E75' },
+                  ].map(dim => (
+                    <div key={dim.name} className="flex items-center gap-3">
+                      <span className="text-sm text-gray-600 w-16">{dim.name}</span>
+                      <HBar value={dim.score} max={5} color={dim.color} />
+                      <span className="text-sm font-medium w-8 text-right" style={{ color: dim.color }}>{dim.score}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Activity by channel */}
+              <div className="bg-white border border-gray-200 rounded-xl p-5">
+                <h3 className="text-sm font-medium text-gray-900 mb-4">Activity by channel</h3>
+                <BarChart data={[
+                  { label: 'Email', value: (d.channels?.email || 0) + (d.emails?.length || 0), color: '#993556' },
+                  { label: 'Call', value: d.channels?.call || 0, color: '#185FA5' },
+                  { label: 'Meeting', value: d.channels?.meeting || 0, color: '#00adef' },
+                  { label: 'WhatsApp', value: d.channels?.whatsapp || 0, color: '#1D9E75' },
+                  { label: 'Other', value: (d.channels?.other || 0) + (d.channels?.in_person || 0), color: '#888780' },
+                ]} />
+              </div>
+
+              {/* Industries */}
+              <div className="bg-white border border-gray-200 rounded-xl p-5">
+                <h3 className="text-sm font-medium text-gray-900 mb-4">Accounts by industry</h3>
+                <BarChart data={Object.entries(d.industries || {}).sort((a: any, b: any) => b[1] - a[1]).slice(0, 6).map(([label, value]: any, i: number) => ({
+                  label, value, color: ['#5a1890', '#00adef', '#c9a54e', '#1D9E75', '#993556', '#185FA5'][i % 6],
+                }))} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ACCOUNTS TAB */}
+        {tab === 'accounts' && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+                <p className="text-2xl font-semibold text-green-700">{d.healthy?.length || 0}</p>
+                <p className="text-xs text-green-600">Healthy</p>
+              </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
+                <p className="text-2xl font-semibold text-amber-700">{d.atRisk?.length || 0}</p>
+                <p className="text-xs text-amber-600">At risk</p>
+              </div>
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+                <p className="text-2xl font-semibold text-red-700">{d.critical?.length || 0}</p>
+                <p className="text-xs text-red-600">Critical</p>
+              </div>
+            </div>
+
+            {/* Inactive accounts */}
+            {(d.inactive?.length || 0) > 0 && (
+              <div className="bg-white border border-gray-200 rounded-xl">
+                <div className="px-5 pt-4 pb-2"><h3 className="text-sm font-medium text-gray-900">Inactive accounts (no contact in 30+ days)</h3></div>
+                {(d.inactive || []).slice(0, 10).map((a: any, i: number) => (
+                  <div key={a.id} className={`flex items-center justify-between px-5 py-2.5 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                    <span className="text-sm text-gray-900">{a.name}</span>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs font-medium ${(a.health_score_total || 0) >= 15 ? 'text-green-700' : (a.health_score_total || 0) >= 10 ? 'text-amber-700' : 'text-red-700'}`}>{a.health_score_total || 0}/20</span>
+                      <span className="text-xs text-gray-400">{formatNaira(a.contract_value_annual || 0)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* All accounts by health */}
+            <div className="bg-white border border-gray-200 rounded-xl">
+              <div className="px-5 pt-4 pb-2"><h3 className="text-sm font-medium text-gray-900">All accounts by health score</h3></div>
+              {(d.accounts || []).sort((a: any, b: any) => (a.health_score_total || 0) - (b.health_score_total || 0)).slice(0, 15).map((a: any, i: number) => (
+                <div key={a.id} className={`flex items-center gap-3 px-5 py-2.5 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                  <span className={`w-2 h-2 rounded-full ${a.health_status === 'healthy' ? 'bg-green-500' : a.health_status === 'at_risk' ? 'bg-amber-500' : 'bg-red-500'}`} />
+                  <span className="text-sm text-gray-900 flex-1">{a.name}</span>
+                  <div className="flex gap-0.5">
+                    {[{ s: a.health_score_know, c: '#5a1890' }, { s: a.health_score_engage, c: '#00adef' }, { s: a.health_score_exceed, c: '#c9a54e' }, { s: a.health_score_prevent, c: '#1D9E75' }].map((dim, j) => (
+                      <div key={j} className="w-5 h-1.5 bg-gray-200 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(dim.s || 0) * 20}%`, background: dim.c }} /></div>
+                    ))}
+                  </div>
+                  <span className={`text-xs font-medium w-10 text-right ${(a.health_score_total || 0) >= 15 ? 'text-green-700' : (a.health_score_total || 0) >= 10 ? 'text-amber-700' : 'text-red-700'}`}>{a.health_score_total || 0}/20</span>
+                  <span className="text-xs text-gray-400 w-16 text-right">{formatNaira(a.contract_value_annual || 0)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TEAM TAB */}
+        {tab === 'team' && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <p className="text-xs text-gray-500 mb-1">Team members</p>
+                <p className="text-xl font-semibold text-gray-900">{d.users?.length || 0}</p>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <p className="text-xs text-gray-500 mb-1">Total interactions ({period})</p>
+                <p className="text-xl font-semibold text-gray-900">{d.recentInteractions?.length || 0}</p>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <p className="text-xs text-gray-500 mb-1">Emails synced ({period})</p>
+                <p className="text-xl font-semibold text-gray-900">{d.emails?.length || 0}</p>
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-xl">
+              <div className="px-5 pt-4 pb-2"><h3 className="text-sm font-medium text-gray-900">Team performance</h3></div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-gray-200 bg-gray-50/80">
+                    <th className="text-left py-3 px-5 text-xs font-medium text-gray-500">Name</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500">Role</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500">Accounts</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500">Interactions</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 w-40">Activity</th>
+                  </tr></thead>
+                  <tbody>
+                    {(d.teamPerformance || []).map((t: any, i: number) => (
+                      <tr key={i} className="border-b border-gray-100">
+                        <td className="py-3 px-5 font-medium text-gray-900">{t.name}</td>
+                        <td className="py-3 px-4 text-gray-500 capitalize">{t.role}</td>
+                        <td className="py-3 px-4 text-gray-700">{t.accounts}</td>
+                        <td className="py-3 px-4 text-gray-700">{t.interactions}</td>
+                        <td className="py-3 px-4"><HBar value={t.interactions} max={maxInteractions} color="#5a1890" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* REVENUE TAB */}
+        {tab === 'revenue' && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <p className="text-xs text-gray-500 mb-1">Total pipeline</p>
+                <p className="text-xl font-semibold text-gray-900">{formatNaira((d.dealWon || 0) + (d.dealOpen || 0) + (d.dealLost || 0))}</p>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <p className="text-xs text-gray-500 mb-1">Won</p>
+                <p className="text-xl font-semibold text-green-700">{formatNaira(d.dealWon || 0)}</p>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <p className="text-xs text-gray-500 mb-1">Open</p>
+                <p className="text-xl font-semibold text-blue-700">{formatNaira(d.dealOpen || 0)}</p>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <p className="text-xs text-gray-500 mb-1">Lost</p>
+                <p className="text-xl font-semibold text-red-700">{formatNaira(d.dealLost || 0)}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <div className="bg-white border border-gray-200 rounded-xl p-5">
+                <h3 className="text-sm font-medium text-gray-900 mb-4">Pipeline breakdown</h3>
+                <DonutChart data={[
+                  { label: 'Won', value: d.dealWon || 0, color: '#1D9E75' },
+                  { label: 'Open', value: d.dealOpen || 0, color: '#00adef' },
+                  { label: 'Lost', value: d.dealLost || 0, color: '#E24B4A' },
+                ]} size={140} />
+              </div>
+
+              <div className="bg-white border border-gray-200 rounded-xl p-5">
+                <h3 className="text-sm font-medium text-gray-900 mb-4">Revenue at risk</h3>
+                <p className="text-3xl font-semibold text-red-600 mb-2">{formatNaira(d.atRiskRevenue || 0)}</p>
+                <p className="text-xs text-gray-500 mb-4">{(d.atRisk?.length || 0) + (d.critical?.length || 0)} accounts with at-risk or critical health</p>
+                <div className="space-y-2">
+                  {[...(d.atRisk || []), ...(d.critical || [])].sort((a: any, b: any) => (b.contract_value_annual || 0) - (a.contract_value_annual || 0)).slice(0, 5).map((a: any) => (
+                    <div key={a.id} className="flex items-center justify-between text-sm">
+                      <span className="text-gray-700">{a.name}</span>
+                      <span className="text-red-600 font-medium">{formatNaira(a.contract_value_annual || 0)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}

@@ -56,7 +56,6 @@ const allNavItems = [
   {
     label: 'Insights',
     items: [
-      { name: 'Analytics', href: '/analytics', icon: AnalyticsIcon },
       { name: 'Reports', href: '/reports', icon: Icons.reports },
       { name: 'Revenue at risk', href: '/reports/revenue-at-risk', icon: Icons.risk },
     ],

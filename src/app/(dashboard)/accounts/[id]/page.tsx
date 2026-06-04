@@ -302,8 +302,8 @@ export default function AccountDetailPage() {
             {aiLoading ? (
               <div className="flex items-center gap-3 py-4"><div className="w-5 h-5 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin" /><span className="text-sm text-gray-500">Analyzing {account.name}...</span></div>
             ) : (
-              <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
-                {aiResult.split('\n').map((line, idx) => {
+<div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words max-h-[500px] overflow-y-auto">
+{aiResult.split('\n').map((line, idx) => {
                   const t = line.trim()
                   if (!t) return <br key={idx} />
                   if (t.startsWith('### ')) return <h4 key={idx} className="font-semibold text-gray-900 mt-3 mb-1 text-sm">{t.slice(4)}</h4>
