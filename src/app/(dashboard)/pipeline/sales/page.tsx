@@ -6,7 +6,7 @@ import type { Deal, PipelineStage } from '@/lib/types'
 import Link from 'next/link'
 import { DealTableView, ViewToggle } from '@/components/ui/PipelineTableView'
 import PipelineHeader from '@/components/ui/PipelineHeader'
-import CardPreview from '@/components/pipeline/CardPreview'
+import DealPreview from '@/components/pipeline/DealPreview'
 
 
 export default function SalesPipelinePage() {
@@ -30,7 +30,7 @@ export default function SalesPipelinePage() {
 
   const [pipelineId, setPipelineId] = useState<string | null>(null)
   const [firstStageId, setFirstStageId] = useState<string | null>(null)
-  const [previewAccountId, setPreviewAccountId] = useState<string | null>(null)
+  const [previewDealId, setPreviewDealId] = useState<string | null>(null)
 
 
   const supabase = createClient()
@@ -353,7 +353,7 @@ export default function SalesPipelinePage() {
   key={deal.id}
   draggable
   onDragStart={() => setDraggedDeal(deal.id)}
-  onClick={() => setPreviewAccountId(deal.id)}
+  onClick={() => setPreviewDealId(deal.id)}
   className="bg-white border border-gray-200 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:border-gray-300 transition-colors"
 >
                       
@@ -501,7 +501,10 @@ export default function SalesPipelinePage() {
         </div>
         
       )}
-      <CardPreview accountId={previewAccountId} onClose={() => setPreviewAccountId(null)} />
-    </div>
+<DealPreview
+  dealId={previewDealId}
+  onClose={() => setPreviewDealId(null)}
+  onUpdate={() => loadPipeline()}
+/>    </div>
   )
 }

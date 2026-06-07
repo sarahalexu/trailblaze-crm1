@@ -30,6 +30,14 @@ function PipelineIcon({ className }: { className?: string }) {
 function TaskIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" /></svg>
 }
+function DealsIcon({ className }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+    strokeLinejoin="round">
+    <line x1="12" y1="1" x2="12" y2="23" />
+    <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+  </svg>
+}
 
 const allNavItems = [
   {
@@ -46,6 +54,7 @@ const allNavItems = [
     items: [
       { name: 'Accounts', href: '/accounts', icon: Icons.accounts },
       { name: 'Contacts', href: '/contacts', icon: Icons.contacts },
+      { name: 'Deals', href: '/deals', icon: DealsIcon },
       { name: 'Interactions', href: '/interactions', icon: Icons.interactions },
       { name: 'Sequences', href: '/sequences', icon: Icons.sequences },
       { name: 'Playbooks', href: '/playbooks', icon: Icons.playbooks },
