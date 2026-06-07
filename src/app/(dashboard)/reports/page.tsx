@@ -22,8 +22,8 @@ function DonutChart({ data, size = 140 }: { data: { label: string; value: number
         if (angle >= 359.9) return <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={d.color} strokeWidth="20" />
         return <path key={i} d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z`} fill={d.color} />
       })}
-      <circle cx={cx} cy={cy} r={r - 20} fill="var(--tw-bg-opacity, white)" className="fill-white dark:fill-gray-900" />
-      <text x={cx} y={cy - 4} textAnchor="middle" className="text-lg font-semibold fill-gray-900 dark:fill-white" style={{ fontSize: 18, fontWeight: 600 }}>{total}</text>
+      <circle cx={cx} cy={cy} r={r - 20} fill="white" />
+      <text x={cx} y={cy - 4} textAnchor="middle" className="fill-gray-900" style={{ fontSize: 18, fontWeight: 600 }}>{total}</text>
       <text x={cx} y={cy + 14} textAnchor="middle" className="fill-gray-400" style={{ fontSize: 11 }}>total</text>
     </svg>
   )
@@ -56,13 +56,15 @@ type TabKey = 'overview' | 'accounts' | 'team' | 'revenue'
 
 export default function ReportsPage() {
   const [tab, setTab] = useState<TabKey>('overview')
-  const [period, setPeriod] = useState<'7d' | '30d' | '90d' | 'all'>('30d')
+  const [period, setPeriod] = useState<'7d' | '30d' | '90d' | 'all' | 'custom'>('30d')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
   const [loading, setLoading] = useState(true)
   const [d, setD] = useState<any>({})
   const supabase = createClient()
   const reportRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { load() }, [period])
+  useEffect(() => { load() }, [period, customFrom, customTo])
 
   async function load() {
     setLoading(true)
@@ -72,15 +74,35 @@ export default function ReportsPage() {
     if (!profile) return
     const orgId = profile.org_id
 
-    const daysAgo = period === '7d' ? 7 : period === '30d' ? 30 : period === '90d' ? 90 : 365
-    const since = new Date(Date.now() - daysAgo * 86400000).toISOString()
+    let since: string
+    let until: string | null = null
+
+    if (period === 'custom' && customFrom) {
+      since = new Date(customFrom + 'T00:00:00').toISOString()
+      until = customTo ? new Date(customTo + 'T23:59:59').toISOString() : null
+    } else if (period === 'all') {
+      since = new Date(0).toISOString()
+    } else {
+      const daysAgo = period === '7d' ? 7 : period === '30d' ? 30 : 90
+      since = new Date(Date.now() - daysAgo * 86400000).toISOString()
+    }
+
+    let emailsQuery = supabase
+      .from('synced_emails')
+      .select('id, direction, sent_at')
+      .eq('org_id', orgId)
+      .gte('sent_at', since)
+
+    if (until) {
+      emailsQuery = emailsQuery.lte('sent_at', until)
+    }
 
     const [accountsRes, interactionsRes, usersRes, dealsRes, emailsRes] = await Promise.all([
       supabase.from('accounts').select('*').eq('org_id', orgId),
       supabase.from('interactions').select('user_id, channel, created_at, follow_up_required').eq('org_id', orgId),
       supabase.from('users').select('id, full_name, role').eq('org_id', orgId).eq('is_active', true),
       supabase.from('deals').select('value, status, stage_id, created_at').eq('org_id', orgId),
-      supabase.from('synced_emails').select('id, direction, sent_at').eq('org_id', orgId).gte('sent_at', since),
+      emailsQuery,
     ])
 
     const accounts = accountsRes.data || []
@@ -96,14 +118,19 @@ export default function ReportsPage() {
     const atRiskRevenue = [...atRisk, ...critical].reduce((s, a) => s + (a.contract_value_annual || 0), 0)
     const avgHealth = accounts.length > 0 ? Math.round((accounts.reduce((s, a) => s + (a.health_score_total || 0), 0) / accounts.length) * 10) / 10 : 0
 
-    const recentInteractions = interactions.filter(i => i.created_at >= since)
-    const recentDeals = deals.filter(d => d.created_at >= since)
+    const recentInteractions = interactions.filter(i => {
+      if (until) return i.created_at >= since && i.created_at <= until
+      return i.created_at >= since
+    })
 
-    // Activity by channel
+    const recentDeals = deals.filter(dl => {
+      if (until) return dl.created_at >= since && dl.created_at <= until
+      return dl.created_at >= since
+    })
+
     const channels: Record<string, number> = {}
     for (const i of recentInteractions) channels[i.channel] = (channels[i.channel] || 0) + 1
 
-    // Interactions per user
     const userActivity: Record<string, number> = {}
     for (const i of recentInteractions) { if (i.user_id) userActivity[i.user_id] = (userActivity[i.user_id] || 0) + 1 }
     const teamPerformance = users.map(u => ({
@@ -112,7 +139,6 @@ export default function ReportsPage() {
       accounts: accounts.filter(a => a.assigned_user_id === u.id).length,
     })).sort((a, b) => b.interactions - a.interactions)
 
-    // KEEP averages
     const keepAvg = accounts.length > 0 ? {
       k: Math.round((accounts.reduce((s, a) => s + (a.health_score_know || 0), 0) / accounts.length) * 10) / 10,
       e: Math.round((accounts.reduce((s, a) => s + (a.health_score_engage || 0), 0) / accounts.length) * 10) / 10,
@@ -120,16 +146,13 @@ export default function ReportsPage() {
       p: Math.round((accounts.reduce((s, a) => s + (a.health_score_prevent || 0), 0) / accounts.length) * 10) / 10,
     } : { k: 0, e: 0, ex: 0, p: 0 }
 
-    // Deals by status
-    const dealWon = deals.filter(d => d.status === 'won').reduce((s, d) => s + (d.value || 0), 0)
-    const dealLost = deals.filter(d => d.status === 'lost').reduce((s, d) => s + (d.value || 0), 0)
-    const dealOpen = deals.filter(d => d.status === 'open' || !d.status).reduce((s, d) => s + (d.value || 0), 0)
+    const dealWon = recentDeals.filter(dl => dl.status === 'won').reduce((s, dl) => s + (dl.value || 0), 0)
+    const dealLost = recentDeals.filter(dl => dl.status === 'lost').reduce((s, dl) => s + (dl.value || 0), 0)
+    const dealOpen = recentDeals.filter(dl => dl.status === 'open' || !dl.status).reduce((s, dl) => s + (dl.value || 0), 0)
 
-    // Accounts by industry
     const industries: Record<string, number> = {}
     for (const a of accounts) { const ind = a.industry || 'Other'; industries[ind] = (industries[ind] || 0) + 1 }
 
-    // Inactive accounts (no interaction in 30+ days)
     const thirtyAgo = new Date(Date.now() - 30 * 86400000).toISOString()
     const inactive = accounts.filter(a => !a.last_interaction_at || a.last_interaction_at < thirtyAgo)
 
@@ -147,16 +170,16 @@ export default function ReportsPage() {
     return '\u20A6' + n.toLocaleString()
   }
 
-  async function downloadPDF() {
+  async function exportReport() {
     const el = reportRef.current
     if (!el) return
     try {
       const content = el.innerText
-      const blob = new Blob([`TrailBlaze CRM Report\nGenerated: ${new Date().toLocaleString()}\nPeriod: ${period}\n\n${content}`], { type: 'text/plain' })
+      const blob = new Blob([`TrailBlaze CRM Report\nGenerated: ${new Date().toLocaleString()}\nPeriod: ${period === 'custom' ? `${customFrom} to ${customTo || 'now'}` : period}\n\n${content}`], { type: 'text/plain' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a'); a.href = url; a.download = `trailblaze-report-${period}.txt`; a.click()
       URL.revokeObjectURL(url)
-    } catch { alert('Download failed. Try again.') }
+    } catch { alert('Export failed. Try again.') }
   }
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-purple-200 border-t-purple-700 rounded-full animate-spin" /></div>
@@ -173,13 +196,27 @@ export default function ReportsPage() {
         <div className="flex items-center gap-2">
           <div className="flex bg-gray-100 rounded-lg p-0.5 text-xs">
             {(['7d', '30d', '90d', 'all'] as const).map(p => (
-              <button key={p} onClick={() => setPeriod(p)} className={`px-2.5 py-1 rounded-md font-medium ${period === p ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+              <button key={p} onClick={() => setPeriod(p)}
+                className={`px-2.5 py-1 rounded-md font-medium ${period === p ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
                 {p === 'all' ? 'All time' : p}
               </button>
             ))}
+            <button onClick={() => setPeriod('custom')}
+              className={`px-2.5 py-1 rounded-md font-medium ${period === 'custom' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+              Custom
+            </button>
           </div>
-          <button onClick={downloadPDF} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
-            {'\u{1F4E5}'} Download report
+          {period === 'custom' && (
+            <div className="flex items-center gap-1.5">
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                className="px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+              <span className="text-xs text-gray-400">to</span>
+              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                className="px-2 py-1 border border-gray-300 rounded-lg text-xs" />
+            </div>
+          )}
+          <button onClick={exportReport} className="px-3 py-2 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
+            {'\u{1F4E5}'} Export report
           </button>
         </div>
       </div>
@@ -198,7 +235,6 @@ export default function ReportsPage() {
       </div>
 
       <div ref={reportRef}>
-        {/* OVERVIEW TAB */}
         {tab === 'overview' && (
           <div className="space-y-5">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -216,7 +252,6 @@ export default function ReportsPage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {/* Health donut */}
               <div className="bg-white border border-gray-200 rounded-xl p-5">
                 <h3 className="text-sm font-medium text-gray-900 mb-4">Health distribution</h3>
                 <div className="flex items-center gap-6">
@@ -241,7 +276,6 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* KEEP averages */}
               <div className="bg-white border border-gray-200 rounded-xl p-5">
                 <h3 className="text-sm font-medium text-gray-900 mb-4">KEEP framework averages</h3>
                 <div className="space-y-3">
@@ -260,7 +294,6 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* Activity by channel */}
               <div className="bg-white border border-gray-200 rounded-xl p-5">
                 <h3 className="text-sm font-medium text-gray-900 mb-4">Activity by channel</h3>
                 <BarChart data={[
@@ -272,7 +305,6 @@ export default function ReportsPage() {
                 ]} />
               </div>
 
-              {/* Industries */}
               <div className="bg-white border border-gray-200 rounded-xl p-5">
                 <h3 className="text-sm font-medium text-gray-900 mb-4">Accounts by industry</h3>
                 <BarChart data={Object.entries(d.industries || {}).sort((a: any, b: any) => b[1] - a[1]).slice(0, 6).map(([label, value]: any, i: number) => ({
@@ -283,7 +315,6 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {/* ACCOUNTS TAB */}
         {tab === 'accounts' && (
           <div className="space-y-5">
             <div className="grid grid-cols-3 gap-3">
@@ -301,7 +332,6 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* Inactive accounts */}
             {(d.inactive?.length || 0) > 0 && (
               <div className="bg-white border border-gray-200 rounded-xl">
                 <div className="px-5 pt-4 pb-2"><h3 className="text-sm font-medium text-gray-900">Inactive accounts (no contact in 30+ days)</h3></div>
@@ -317,7 +347,6 @@ export default function ReportsPage() {
               </div>
             )}
 
-            {/* All accounts by health */}
             <div className="bg-white border border-gray-200 rounded-xl">
               <div className="px-5 pt-4 pb-2"><h3 className="text-sm font-medium text-gray-900">All accounts by health score</h3></div>
               {(d.accounts || []).sort((a: any, b: any) => (a.health_score_total || 0) - (b.health_score_total || 0)).slice(0, 15).map((a: any, i: number) => (
@@ -337,7 +366,6 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {/* TEAM TAB */}
         {tab === 'team' && (
           <div className="space-y-5">
             <div className="grid grid-cols-3 gap-3">
@@ -346,11 +374,11 @@ export default function ReportsPage() {
                 <p className="text-xl font-semibold text-gray-900">{d.users?.length || 0}</p>
               </div>
               <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <p className="text-xs text-gray-500 mb-1">Total interactions ({period})</p>
+                <p className="text-xs text-gray-500 mb-1">Total interactions ({period === 'custom' ? 'custom' : period})</p>
                 <p className="text-xl font-semibold text-gray-900">{d.recentInteractions?.length || 0}</p>
               </div>
               <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <p className="text-xs text-gray-500 mb-1">Emails synced ({period})</p>
+                <p className="text-xs text-gray-500 mb-1">Emails synced ({period === 'custom' ? 'custom' : period})</p>
                 <p className="text-xl font-semibold text-gray-900">{d.emails?.length || 0}</p>
               </div>
             </div>
@@ -383,7 +411,6 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {/* REVENUE TAB */}
         {tab === 'revenue' && (
           <div className="space-y-5">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -408,11 +435,26 @@ export default function ReportsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               <div className="bg-white border border-gray-200 rounded-xl p-5">
                 <h3 className="text-sm font-medium text-gray-900 mb-4">Pipeline breakdown</h3>
-                <DonutChart data={[
-                  { label: 'Won', value: d.dealWon || 0, color: '#1D9E75' },
-                  { label: 'Open', value: d.dealOpen || 0, color: '#00adef' },
-                  { label: 'Lost', value: d.dealLost || 0, color: '#E24B4A' },
-                ]} size={140} />
+                <div className="flex items-center gap-6">
+                  <DonutChart data={[
+                    { label: 'Won', value: d.dealWon || 0, color: '#1D9E75' },
+                    { label: 'Open', value: d.dealOpen || 0, color: '#00adef' },
+                    { label: 'Lost', value: d.dealLost || 0, color: '#E24B4A' },
+                  ]} size={140} />
+                  <div className="space-y-2">
+                    {[
+                      { label: 'Won', value: formatNaira(d.dealWon || 0), color: '#1D9E75' },
+                      { label: 'Open', value: formatNaira(d.dealOpen || 0), color: '#00adef' },
+                      { label: 'Lost', value: formatNaira(d.dealLost || 0), color: '#E24B4A' },
+                    ].map(s => (
+                      <div key={s.label} className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: s.color }} />
+                        <span className="text-sm text-gray-700">{s.label}</span>
+                        <span className="text-sm font-medium text-gray-900 ml-auto">{s.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div className="bg-white border border-gray-200 rounded-xl p-5">
