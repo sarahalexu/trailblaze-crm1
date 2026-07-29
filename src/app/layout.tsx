@@ -6,7 +6,6 @@ import '@/styles/globals.css'
 import * as Sentry from '@sentry/nextjs'
 
 import CookieConsent from '@/components/ui/CookieConsent'
-import OfflineIndicator from '@/components/ui/OfflineIndicator'
 import GoogleAnalytics from '@/components/analytics/GoogleAnalytics'
 import FeedbackButton from '@/components/ui/FeedbackButton'
 
@@ -31,7 +30,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-gray-50">
-        <OfflineIndicator />
         <GoogleAnalytics />
         {children}
         <CookieConsent />
