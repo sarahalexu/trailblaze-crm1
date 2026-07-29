@@ -34,6 +34,22 @@ export default function RootLayout({
         {children}
         <CookieConsent />
         <FeedbackButton />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+                  .then(function(reg) {
+                    reg.update();
+                  })
+                  .catch(function() {});
+                navigator.serviceWorker.getRegistrations().then(function(regs) {
+                  regs.forEach(function(reg) { reg.update(); });
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   )
