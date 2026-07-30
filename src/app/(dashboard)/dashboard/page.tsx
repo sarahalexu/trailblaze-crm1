@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import SetupChecklist from '@/components/ui/SetupChecklist'
 import DashboardTasks from '@/components/ui/DashboardTasks'
+import CompanyAvatar from '@/components/ui/CompanyAvatar'
 
 // Sparkline with gradient fill
 function Sparkline({ data, color = '#5a1890', height = 40 }: { data: number[]; color?: string; height?: number }) {

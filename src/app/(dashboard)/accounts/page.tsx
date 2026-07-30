@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Account } from '@/lib/types'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import CompanyAvatar from '@/components/ui/CompanyAvatar'
 
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -121,9 +122,7 @@ export default function AccountsPage() {
                   <tr key={account.id} onClick={() => router.push(`/accounts/${account.id}`)} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors">
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-medium flex-shrink-0" style={{ background: '#2b054810', color: '#5a1890' }}>
-                          {initials}
-                        </div>
+                      <CompanyAvatar name={account.name} website={account.website} size={36} />
                         <div>
                           <p className="font-medium text-gray-900">{account.name}</p>
                           {account.industry && <p className="text-xs text-gray-400">{account.industry}</p>}

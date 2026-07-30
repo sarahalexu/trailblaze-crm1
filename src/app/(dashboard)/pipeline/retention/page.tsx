@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { AccountTableView, ViewToggle } from '@/components/ui/PipelineTableView'
 import PipelineHeader from '@/components/ui/PipelineHeader'
 import CardPreview from '@/components/pipeline/CardPreview'
+import CompanyAvatar from '@/components/ui/CompanyAvatar'
 
 export default function RetentionPipelinePage() {
   const [pipeline, setPipeline] = useState<Pipeline | null>(null)
@@ -214,9 +215,10 @@ export default function RetentionPipelinePage() {
                       onClick={() => setPreviewAccountId(account.id)}
                       className="bg-white border border-gray-200 rounded-lg p-3 cursor-pointer cursor-grab active:cursor-grabbing hover:border-gray-300 transition-colors"
                     >
-                      <div className="text-sm font-medium text-gray-900 mb-1">
-                        {account.name}
-                      </div>
+                      <div className="flex items-center gap-2 mb-1">
+  <CompanyAvatar name={account.name} website={account.website} size={24} />
+  <span className="text-sm font-medium text-gray-900">{account.name}</span>
+</div>
 
                       <div className="text-xs text-gray-400 mb-2">
                         {account.industry}
